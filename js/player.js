@@ -14,7 +14,7 @@
     moving: false, running: false, speed: 0, phase: 0, camDist: 7.5, hideAvatar: false, enabled: false, on: {}
   };
   var RADIUS = 0.35, WALK = 5.4, RUN = 12, STAIR_MAX = 8, EYE = 1.12;   // m/s; on a stair flight speed is capped so the climb stays smooth
-  var lastWheel = -1e9, ZOOM_LEAD = 3, ZOOM_SPEED = 3;      // target may lead by 3 m; camera moves at most 3 m/s
+  var lastWheel = -1e9, ZOOM_LEAD = 6, ZOOM_SPEED = 3;      // target may lead by 6 m; camera moves at most 3 m/s
   var ZOOM_MIN = 3, ZOOM_MAX = 16, ZOOM_NOTCH = 0.6;      // metres; one wheel notch = 0.6 m
   var keys = {}, joy = { x: 0, z: 0, id: null, ox: 0, oy: 0 }, drag = { id: null, x: 0, y: 0 };
 
@@ -75,6 +75,8 @@
       var px = e.deltaMode === 1 ? e.deltaY * 33 : (e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY);
       var step = Math.abs(px) >= 50 ? Math.sign(px) : px / 100;
       if (gap > 150 && px !== 0 && Math.abs(px) < 30) step = Math.sign(px) * Math.max(Math.abs(step), 1 / 3);
+      var lead = Pl.dist - Pl.camDist;
+      if (step * lead < 0 && Math.abs(lead) > 0.05) Pl.dist = Pl.camDist;          // reversing direction: start from where the camera is
       Pl.dist = clamp(Pl.dist + step * ZOOM_NOTCH, Math.max(ZOOM_MIN, Pl.camDist - ZOOM_LEAD), Math.min(ZOOM_MAX, Pl.camDist + ZOOM_LEAD));
     }, { passive: false });
     canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });

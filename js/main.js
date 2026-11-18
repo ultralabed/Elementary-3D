@@ -73,7 +73,7 @@
   function toggleMute() { if (!S.audio) return; var m = S.audio.toggleMute(); H.toast(m ? 'Sound off' : 'Sound on', 1.2); }
   function setupTouchButtons() {
     var mute = document.getElementById('btnMute');
-    if (mute) mute.addEventListener('click', function () { if (S.audio) S.audio.init(); toggleMute(); mute.blur(); });
+    if (mute) mute.addEventListener('click', function (e) { if (S.audio) S.audio.init(); toggleMute(); if (e.detail > 0) mute.blur(); });   // keyboard activation keeps its focus ring
     var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
     var help = document.getElementById('btnHelp'); touchTalk = document.getElementById('btnTalk');
     if (!isTouch || !help || !touchTalk) { touchTalk = null; return; }
@@ -97,8 +97,9 @@
     if (!n) { H.toast('Nobody close enough - walk up to someone and press F', 1.8); return; }
     // face the player and speak
     n.faceTo = Math.atan2(Pl.x - n.x, Pl.z - n.z); n.h = n.faceTo;
-    H.say(n, P.speak(n), 3.4);
-    if (S.audio) S.audio.talk(n);
+    var line = P.speak(n);
+    H.say(n, line, 3.4);
+    if (S.audio) S.audio.talk(n, line);
   }
 
   // keep the sun's shadow box centred on the player, snapped to shadow texels
@@ -176,7 +177,7 @@
   // ---------------------------------------------------------------- debug
   S.debug = {
     teleport: function (x, z, level) { Pl.teleport(x, z, level); Pl.inside = L.insideBuilding(Pl.x, Pl.z, Pl.level); return { x: Pl.x, z: Pl.z, level: Pl.level, y: Pl.y }; },
-    setTime: function (hours) { P.setTime(hours); },
+    setTime: function (hours) { P.setTime(hours); if (S.audio) S.audio.syncBlock(); },
     start: start,
     setYaw: function (yaw, pitch, dist) { Pl.yaw = yaw; if (pitch !== undefined) Pl.pitch = pitch; if (dist !== undefined) { Pl.dist = dist; Pl.camDist = dist; } },
     // test hook: replace the avatar by an unlit magenta sphere at the head and count its visible pixels.

@@ -508,19 +508,19 @@
   var LINES = {
     student: {
       class: ['I love learning new things!', "We're doing math today!", 'Shh, I am reading.', 'Can I borrow a pencil?', 'I drew a dinosaur!'],
-      specials: ['Today is specials - yay!', 'I love this room!', 'Are we doing something fun today?'],
-      lunch: ['Lunch is my favorite!', 'Want to trade snacks?', 'Mmm, pizza day!'],
+      specials: ['Today is specials, hooray!', 'I love this room!', 'Are we doing something fun today?'],
+      lunch: ['Lunch is my favorite!', 'Want to trade snacks?', 'Yum, it is pizza day!'],
       recess: ['Recess is the best!', 'Want to play tag?', 'I can swing so high!', 'Race you to the slide!'],
       arrive: ['Good morning!', 'My bus was so bumpy!', 'I hope we have art today.'],
       dismiss: ['See you tomorrow!', 'Time to go home!', 'Bye, bye!'], hidden: ['Hi!']
     },
     Teacher: ['Good job, everyone!', 'Walking feet, please.', 'Wonderful question!', 'Eyes on the board, friends.'],
     'PE Coach': ['Let us get moving!', 'Great teamwork out there!', 'Water break, everyone!'],
-    Librarian: ['Welcome to the library - shhh!', 'Looking for a good book?', 'Remember to return your books!'],
-    'Music Teacher': ['Do, re, mi!', 'Can you clap this rhythm?', 'Music makes everything better.'],
+    Librarian: ['Welcome to the library. Please use your quiet voice.', 'Looking for a good book?', 'Remember to return your books!'],
+    'Music Teacher': ['Do, re, mi, fa, so, la, ti, do!', 'Can you clap this rhythm?', 'Music makes everything better.'],
     'Art Teacher': ['Be creative!', 'There are no mistakes in art.', 'Who wants to mix some colors?'],
     'STEM Teacher': ['Let us build something!', 'Science is everywhere.', 'What is your hypothesis?'],
-    'Computer Teacher': ['Click, click, code!', 'Remember to save your work.', 'Typing practice time!'],
+    'Computer Teacher': ['Let us write some code today!', 'Remember to save your work.', 'Typing practice time!'],
     Counselor: ['My door is always open.', 'How are you feeling today?', 'Kindness counts.'],
     'Resource Teacher': ['We learn at our own pace.', 'You can do it!', 'Let us try that together.'],
     Principal: ['Welcome to our school!', 'I am so proud of our students.', 'Have a wonderful day!'],
@@ -600,7 +600,7 @@
     var cx = camera.position.x, cy = camera.position.y, cz = camera.position.z, hideUp = P.view.hideUpper, tp = P.view.thirdPerson;
     for (i = 0; i < npcs.length; i++) {
       var q = npcs[i], ddx = q.x - cx, ddz = q.z - cz, ddy = q.y + 0.8 - cy;
-      q.cull = q !== player && ((hideUp && q.level === 1) || (tp && ddx * ddx + ddz * ddz + ddy * ddy < 2.25));
+      q.cull = q !== player && ((hideUp && q.level === 1 && !L.stairAt(q.x, q.z)) || (tp && ddx * ddx + ddz * ddz + ddy * ddy < 2.25));
       renderNPC(i, q, Math.abs(ddx) + Math.abs(ddz) < 80 || q === player, camT);
     }
     for (k = 0; k < ALL_KEYS.length; k++) parts[ALL_KEYS[k]].instanceMatrix.needsUpdate = true;

@@ -26,6 +26,10 @@ A browser-based cartoon walk-around of the made-up Maple Star Elementary campus.
 
 Touch: left side joystick, drag on the right to look.
 
+## Sound credits
+
+The crowd sound is made of three public-domain recordings (PDSounds, via Wikimedia Commons), mixed by how many characters are nearby: "Ambient classroom mono" by rcrossley, "Kids next door" by ezwa and "High school cafeteria" by aradlaw. They live in `audio/` and are listed in `audio/manifest.json`; `python3 tools/build_artifact.py` refreshes the list and embeds them in `dist/artifact.html`. Any of the three may be missing. Recordings load over http(s) (not from a `file://` page); everything else (bell, footsteps, wind, birds, ...) is synthesized, and talking to a character uses the browser's own speech synthesis.
+
 ## Disclaimer
 
 A made-up cartoon school. Ground shapes are based on OpenStreetMap data; the building, rooms and everyone in it are fictional. The school day is a pretend schedule.

@@ -6,7 +6,7 @@
   'use strict';
   var S = window.CAMPUS, L = S.layout;
   var H = S.hud = { big: false };
-  var el = {}, last = { place: '', clock: '', period: '', fast: null, prompt: '' }, mapStatic = null, mapLabels = null, mapKey = '', lastMap = 0, bubbleNpc = null, bubbleUntil = 0, toastUntil = 0;
+  var lastLayout = 0, el = {}, last = { place: '', clock: '', period: '', fast: null, prompt: '' }, mapStatic = null, mapLabels = null, mapKey = '', lastMap = 0, bubbleNpc = null, bubbleUntil = 0, toastUntil = 0;
   var MAP = { x0: -150, x1: 165, z0: -135, z1: 112 };
 
   function $(id) { return document.getElementById(id); }
@@ -17,13 +17,13 @@
     el.helpClose.addEventListener('click', function () { H.toggleHelp(false); });
     el.minimap.addEventListener('click', function () { H.toggleMap(); });
     sizeMap();
-    window.addEventListener('resize', sizeMap);
+    window.addEventListener('resize', function () { sizeMap(); layoutButtons(); });
   };
   H.isHelpOpen = function () { return !el.help.hidden; };
   H.toggleHelp = function (on) { el.help.hidden = on === undefined ? !el.help.hidden : !on; if (!el.help.hidden) el.helpClose.focus(); };
   H.toggleMap = function (on) {
     H.big = on === undefined ? !H.big : on; el.minimap.classList.toggle('big', H.big);
-    el.mapHint.textContent = H.big ? 'M or click: close map' : 'M: big map'; sizeMap(); lastMap = 0;
+    el.mapHint.textContent = H.big ? 'M or click: close map' : 'M: big map'; sizeMap(); lastMap = 0; layoutButtons();
   };
   H.toast = function (text, sec) { el.toast.textContent = text; el.toast.hidden = false; toastUntil = performance.now() + (sec || 2.4) * 1000; };
   H.joy = function (on, ox, oy, jx, jz) {
@@ -126,7 +126,7 @@
         c.fillStyle = L.schoolColor; text('MAPLE STAR ELEMENTARY', X(8), Z(46));
       } else {
         c.font = '800 ' + (rs + 3) + 'px "Trebuchet MS", system-ui, sans-serif'; c.fillStyle = '#16345e';
-        text('Second floor: grades 3-5, Art, STEM, Computer Lab', p.x + p.w / 2, Z(F2.z1) + rs * 0.2);
+        text('Grades 3-5, Art and labs', p.x + p.w / 2, Z(F2.z1) + rs * 0.2);
         c.strokeStyle = 'rgba(31,42,68,.25)'; c.lineWidth = 2; c.strokeRect(p.x + 1, p.y + 1, p.w - 2, p.h - 2); c.strokeStyle = 'rgba(255,255,255,.85)';
       }
     });
@@ -157,8 +157,20 @@
     }
   }
 
+  // The speaker / talk / help buttons sit 8 px above the minimap, wherever its real height puts
+  // them, and are hidden while the big map is open.
+  function layoutButtons() {
+    var box = document.getElementById('touchBtns'); if (!box) return;
+    box.classList.toggle('hide', H.big);
+    if (H.big) return;
+    var r = el.minimap.getBoundingClientRect();
+    box.style.bottom = Math.round(window.innerHeight - r.top + 8) + 'px';
+  }
+  H.layoutButtons = layoutButtons;
+
   // called each frame
   H.update = function (info) {
+    if (performance.now() - lastLayout > 300) { lastLayout = performance.now(); layoutButtons(); }
     var now = performance.now(), pl = info.player, P = S.people;
     var ct = P.fmtTime(), pn = P.blockName();                  // only touch the DOM when a value changed
     if (info.place !== last.place) el.place.textContent = last.place = info.place;

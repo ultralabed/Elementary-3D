@@ -111,9 +111,11 @@ canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: bl
 @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 
 /* touch-only buttons (shown by main.js) */
-#touchBtns { position: fixed; right: calc(var(--gutter) + env(safe-area-inset-right, 0px)); bottom: calc(190px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+#touchBtns { position: fixed; right: calc(var(--gutter) + env(safe-area-inset-right, 0px)); bottom: calc(190px + env(safe-area-inset-bottom, 0px));   /* bottom is set from the minimap's real height by hud.js */ display: flex; flex-direction: column; gap: 8px; z-index: 5; }
 .tbtn { font: inherit; font-weight: 800; min-width: 54px; min-height: 44px; border-radius: 999px; border: 2px solid var(--accent); background: var(--hud-bg); color: var(--accent); padding: 4px 12px; box-shadow: var(--panel-shadow); touch-action: manipulation; }
 .tbtn:disabled { opacity: 0.45; }
+.credit-line { font-size: 0.8rem; color: var(--hud-dim); list-style: none; margin-left: -18px; margin-top: 6px; }
+#touchBtns.hide { display: none; }
 #btnMute { display: flex; align-items: center; justify-content: center; padding: 4px; cursor: pointer; }
 #btnMute .slash, #btnMute.muted .waves { display: none; }
 #btnMute.muted .slash { display: inline; }
