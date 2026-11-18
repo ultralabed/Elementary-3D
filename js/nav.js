@@ -276,9 +276,9 @@
   };
 
   // nearest hub reachable (used when something must start from an arbitrary point)
-  nav.nearestHub = function (x, z) {
-    var best = null, bd = 1e9;
-    nodes.forEach(function (h) { if (h.leaf || h.level) return; var d = Math.hypot(h.x - x, h.z - z); if (d < bd && !L.segBlocked(x, z, h.x, h.z, 0.3, -1)) { bd = d; best = h; } });
+  nav.nearestHub = function (x, z, level) {
+    var best = null, bd = 1e9; level = level || 0;
+    nodes.forEach(function (h) { if (h.leaf || h.level !== level) return; var d = Math.hypot(h.x - x, h.z - z); if (d < bd && !L.segBlocked(x, z, h.x, h.z, 0.3, -1, level)) { bd = d; best = h; } });
     return best;
   };
   // connectivity sanity check: every spot must be reachable from the lobby door

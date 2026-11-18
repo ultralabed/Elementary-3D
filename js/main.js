@@ -53,6 +53,7 @@
       Pl.on.help = function () { H.toggleHelp(); Pl.clearKeys(); };
       Pl.on.blocked = function () { return !started ? 'overlay' : (H.isHelpOpen() ? 'help' : false); };
       setupTouchButtons();
+      Pl.on.mute = toggleMute;
       Pl.on.fast = function () { P.clock.fast = !P.clock.fast; H.toast(P.clock.fast ? 'Fast time x5' : 'Normal time', 1.4); };
       Pl.on.talk = talk; Pl.on.joy = H.joy;
       Pl.on.escape = function () { if (H.big) H.toggleMap(false); H.toggleHelp(false); Pl.clearKeys(); };
@@ -67,15 +68,22 @@
   }
 
   // Touch devices get two small on-screen buttons: Talk (same as F) and ? (help)
+  // On-screen buttons: the speaker (mute) button is always there; Talk (same as F) and ? (help)
+  // only on touch devices.  Buttons give the focus back so the keyboard keeps driving the player.
+  function toggleMute() { if (!S.audio) return; var m = S.audio.toggleMute(); H.toast(m ? 'Sound off' : 'Sound on', 1.2); }
   function setupTouchButtons() {
+    var mute = document.getElementById('btnMute');
+    if (mute) mute.addEventListener('click', function () { if (S.audio) S.audio.init(); toggleMute(); mute.blur(); });
     var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-    var box = document.getElementById('touchBtns'); if (!isTouch || !box) return;
-    touchTalk = document.getElementById('btnTalk'); box.hidden = false;
-    touchTalk.addEventListener('click', talk);
-    document.getElementById('btnHelp').addEventListener('click', function () { H.toggleHelp(); Pl.clearKeys(); });
+    var help = document.getElementById('btnHelp'); touchTalk = document.getElementById('btnTalk');
+    if (!isTouch || !help || !touchTalk) { touchTalk = null; return; }
+    touchTalk.hidden = false; help.hidden = false;
+    touchTalk.addEventListener('click', function () { talk(); touchTalk.blur(); });
+    help.addEventListener('click', function () { H.toggleHelp(); Pl.clearKeys(); });
   }
   function start() {
     if (started) return;
+    if (S.audio) S.audio.init();          // we are inside a user gesture (click / key): audio may start
     started = true; Pl.enabled = true; document.getElementById('overlay').hidden = true; renderer.domElement.focus();
   }
   function onResize() {
@@ -90,6 +98,7 @@
     // face the player and speak
     n.faceTo = Math.atan2(Pl.x - n.x, Pl.z - n.z); n.h = n.faceTo;
     H.say(n, P.speak(n), 3.4);
+    if (S.audio) S.audio.talk(n);
   }
 
   // keep the sun's shadow box centred on the player, snapped to shadow texels
@@ -133,6 +142,7 @@
     if (touchTalk) touchTalk.disabled = !nearNpc;
     hudInfo.player = Pl; hudInfo.place = place; hudInfo.nearNpc = nearNpc; hudInfo.project = project;
     H.update(hudInfo);
+    if (S.audio) S.audio.update(dt, Pl, started);
     renderer.info.reset();
     renderer.render(scene, camera);
     info.calls = renderer.info.render.calls; info.triangles = renderer.info.render.triangles;
@@ -143,10 +153,19 @@
   //   inside, level 1    -> only the upper roof hidden (also on the upper half of a stair flight)
   // Hidden groups stop casting shadows too.
   function applyVisibility(playing) {
-    var W = S.world, inside = playing && Pl.inside, down = inside && Pl.level === 0;
-    W.upperGroup.visible = !down; W.roofGroup.visible = !down; W.roofUpGroup.visible = !inside;
-    P.view.hideUpper = down; P.view.thirdPerson = playing && !Pl.fp;
-    W.updateCutMaterials(Pl.level === 1, !!L.stairAt(Pl.x, Pl.z));
+    var W = S.world, inside = playing && Pl.inside, tower = inside && !!L.stairAt(Pl.x, Pl.z), fp = Pl.fp;
+    // first person keeps everything (you look up at ceilings); in a stair tower the upper floor
+    // stays so nothing pops at mid-flight
+    var down = inside && !fp && Pl.level === 0 && !tower;
+    W.upperGroup.visible = !down;
+    W.roofGroup.visible = !(inside && !fp && (Pl.level === 0 || tower));
+    W.roofUpGroup.visible = !(inside && !fp);
+    P.view.hideUpper = down; P.view.thirdPerson = playing && !fp;
+    // draw-call savers: room contents nobody can see
+    var c = camera.position, far = !playing || (!Pl.inside && (c.x < -56 || c.x > 24 || c.z < -32 || c.z > 16));
+    W.upperInterior.visible = !far;                                       // upstairs furniture / desks / signs
+    W.underGroup.visible = !far && !(inside && !fp && Pl.level === 1 && !tower);   // ground wing rooms are under the floor when upstairs
+    W.updateCutMaterials(Pl.y, tower, Pl.level === 1 && !tower);
   }
   function project(x, y, z) {
     var v = tmpV.set(x, y, z).project(camera);
@@ -181,11 +200,12 @@
       return out;
     },
     setHeading: function (h) { Pl.heading = h; },
+    audioState: function () { return S.audio ? S.audio.state() : { ctxState: 'none', muted: false, activeVoices: 0, crowdLevel: 0, ambience: 'out', masterGain: 0 }; },
     getState: function () {
       return {
         x: Pl.x, z: Pl.z, y: Pl.y, level: Pl.level, place: L.placeAt(Pl.x, Pl.z, Pl.level), period: P.blockName(), time: P.clock.t / 60, clock: P.fmtTime(),
         inside: Pl.inside, npcCount: P.count(), visibleNpc: P.visibleCount(), fps: Math.round(fpsAvg), calls: info.calls, triangles: info.triangles,
-        roofVisible: S.world.roofGroup.visible, upperRoofVisible: S.world.roofUpGroup.visible, upperVisible: S.world.upperGroup.visible, upperDrawn: P.drawnOnLevel(1), programs: renderer.info.programs ? renderer.info.programs.length : 0, fast: P.clock.fast, started: started, fp: Pl.fp, camDist: Pl.camDist, zoom: Pl.dist, cutOn: S.world.cut.uCutOn.value
+        roofVisible: S.world.roofGroup.visible, upperRoofVisible: S.world.roofUpGroup.visible, upperVisible: S.world.upperGroup.visible, upperDrawn: P.drawnOnLevel(1), programs: renderer.info.programs ? renderer.info.programs.length : 0, fast: P.clock.fast, started: started, fp: Pl.fp, muted: !!(S.audio && S.audio.muted), camDist: Pl.camDist, zoom: Pl.dist, cutOn: S.world.cut.uCutOn.value
       };
     },
     // advance only the simulation (no rendering) - used by tests

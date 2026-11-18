@@ -262,6 +262,7 @@
       n.x = o.x + dx / d * 0.6; n.z = o.z + dz / d * 0.6;
       var r = L.resolve(n.x, n.z, 0.26, true, n.level); n.x = r.x; n.z = r.z;
     }
+    L.surface(n); n.y += n.yo;                 // the nudge may have moved it along a stair flight
   }
   function placeAt(n, spot) {
     setDest(n, spot);
@@ -456,6 +457,7 @@
         if (d2 < 0.36 && d2 > 1e-6) { var d = Math.sqrt(d2), push = (0.6 - d) * 0.5 * k; a.x += dx / d * push; a.z += dz / d * push; }
       }
       var r = L.resolve(a.x, a.z, 0.26, true, a.level); a.x = r.x; a.z = r.z;
+      L.surface(a); a.y += a.yo;               // keep the height right after being pushed (stairs)
     }
   }
 
@@ -541,7 +543,7 @@
   P.nearestTo = function (x, z, maxD, level) {
     var best = null, bd = maxD; level = level || 0;
     for (var i = 0; i < npcs.length; i++) {
-      var n = npcs[i]; if (n.hidden || n === player || n.level !== level) continue;
+      var n = npcs[i]; if (n.hidden || n.cull || n === player || n.level !== level) continue;
       var dx = n.x - x, dz = n.z - z, d = Math.sqrt(dx * dx + dz * dz);
       if (d >= bd) continue;
       if (L.rayWall(x, 1.0, z, n.x, 1.0, n.z, 0, level) < 1) continue;

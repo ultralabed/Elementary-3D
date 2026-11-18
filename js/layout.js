@@ -260,7 +260,9 @@
   // ===== second floor (wall heights are relative to its floor) =====
   LV = 1;
   addWall('x', -28, -40, 8, WALL_H, null, true);                               // back wall (windows only)
-  addWall('x', 8, -52, 20, WALL_H, [[-42, -40, 'door', 'stairW'], [-30, -26, 'void'], [-6, -2, 'void'], [8, 10, 'door', 'stairE']], true);
+  addWall('x', 8, -52, -42, WALL_H, null, true);                               // back of the west tower (outside)
+  addWall('x', 8, -42, 10, WALL_H, [[-42, -40, 'door', 'stairW'], [-30, -26, 'void'], [-6, -2, 'void'], [8, 10, 'door', 'stairE']]);   // upper hallway north wall (indoors)
+  addWall('x', 8, 10, 20, WALL_H, null, true);                                 // back of the east tower (outside)
   addWall('x', 12, -42, 10, WALL_H, null, true);                               // upper hallway south wall (windows)
   addWall('z', -42, 8, 12, WALL_H, null, true); addWall('z', 10, 8, 12, WALL_H, null, true);
   wingWalls(WINGS[2], WALL_H); wingWalls(WINGS[3], WALL_H);
@@ -280,7 +282,7 @@
     if (r.x1 === 8 && !(r.band === 0)) win('z', 8, r.cz, 3.0, 1.2, 2.6, r.level);
   });
   [-28, -4].forEach(function (x) { win('x', -28, x, 2.4, 1.0, 2.8, 1); });                 // upper wing hall ends
-  [-36, -30, -24, -18, -12, -6, 0, 6].forEach(function (x) { win('x', 12, x, 2.6, 1.2, 2.8, 1); });   // upper hallway, over the front roof
+  [-12, -6, 0, 6].forEach(function (x) { win('x', 12, x, 2.6, 1.2, 2.8, 1); });   // upper hallway, over the front roof (west of x=-16 the taller gym wall is in the way)
   [24, 28, 32, 44, 48, 52].forEach(function (x) { win('x', 8, x, 2.6, 1.1, 2.7, 0); });   // main hallway onto the courtyard
   [[-46, -52], [14, 20]].forEach(function (q) { win('x', 2, q[0], 3.0, 1.2, 2.8, 0); win('x', 2, q[0], 3.0, 1.2, 2.8, 1); });   // stair towers
   [-36, -30, -24, -18].forEach(function (x) { win('x', 40, x, 3.2, 4.6, 6.8); });          // gym front (high)
@@ -380,7 +382,8 @@
   };
   L.placeAt = function (x, z, level) {
     var r = L.roomAt(x, z, level || 0);
-    if (r) return r.level === 2 ? r.name : r.name + (r.level ? ' \u00b7 2nd floor' : ' \u00b7 1st floor');
+    // only places that exist on two storeys say which floor they are on
+    if (r) return (r.wing || r.id === 'hall' || r.id === 'uphall' || r.level === 2) ? r.name + (level ? ' \u00b7 2nd floor' : ' \u00b7 1st floor') : r.name;
     if (level === 1) return 'Second Floor';
     for (var k in Z) if (inRect0(Z[k], x, z)) return Z[k].name;
     if (pip(L.parkingPoly, x, z)) return 'Parking Lot';

@@ -14,7 +14,7 @@
     moving: false, running: false, speed: 0, phase: 0, camDist: 7.5, hideAvatar: false, enabled: false, on: {}
   };
   var RADIUS = 0.35, WALK = 4, RUN = 8, EYE = 1.12;
-  var wheelBudget = 1, lastWheel = -1e9;
+  var lastWheel = -1e9, ZOOM_LEAD = 3, ZOOM_SPEED = 3;      // target may lead by 3 m; camera moves at most 3 m/s
   var ZOOM_MIN = 3, ZOOM_MAX = 16, ZOOM_NOTCH = 0.6;      // metres; one wheel notch = 0.6 m
   var keys = {}, joy = { x: 0, z: 0, id: null, ox: 0, oy: 0 }, drag = { id: null, x: 0, y: 0 };
 
@@ -37,6 +37,7 @@
       else if (c === 'KeyM' && Pl.on.map) Pl.on.map();
       else if (c === 'KeyF' && Pl.on.talk) Pl.on.talk();
       else if (c === 'KeyT' && Pl.on.fast) Pl.on.fast();
+      else if (c === 'KeyN' && Pl.on.mute) Pl.on.mute();
     });
     window.addEventListener('keyup', function (e) { if (MOVE_KEYS[e.code]) { keys[e.code] = false; } });
     window.addEventListener('blur', function () { keys = {}; });
@@ -65,16 +66,16 @@
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
     canvas.addEventListener('wheel', function (e) {
       e.preventDefault();
-      // Normalise mice / trackpads: one notch (deltaY 100 px, or 3 lines) is 0.6 m and never more
-      // per event; a refilling budget caps the zoom rate at about 5 notches (3 m) per second so a
-      // trackpad flick cannot fly through the range; an isolated tiny delta (Mac mouse wheels send
-      // about 4 px) still counts as a third of a notch.
-      var now = performance.now(), gap = now - lastWheel, px = e.deltaMode === 1 ? e.deltaY * 33 : (e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY);
-      var want = clamp(px / 100, -1, 1);
-      if (gap > 150 && e.deltaMode === 0 && Math.abs(e.deltaY) < 30 && e.deltaY !== 0) want = Math.sign(e.deltaY) * Math.max(Math.abs(want), 1 / 3);
-      wheelBudget = Math.min(1, wheelBudget + gap / 200); lastWheel = now;
-      var step = clamp(want, -wheelBudget, wheelBudget); wheelBudget -= Math.abs(step);
-      Pl.dist = clamp(Pl.dist + step * ZOOM_NOTCH, ZOOM_MIN, ZOOM_MAX);
+      // Wheel input accumulates into a target distance (Pl.dist); the camera then eases to it at
+      // no more than 3 m/s.  One notch (|deltaY| >= 50 px, or a line-mode tick) is 0.6 m, smaller
+      // trackpad deltas count proportionally, and an isolated tiny delta (Mac mouse wheels send
+      // about 4 px) still counts as a third of a notch.  The target may lead the camera by at
+      // most 3 m, so a long trackpad flick cannot run through the whole range.
+      var now = performance.now(), gap = now - lastWheel; lastWheel = now;
+      var px = e.deltaMode === 1 ? e.deltaY * 33 : (e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY);
+      var step = Math.abs(px) >= 50 ? Math.sign(px) : px / 100;
+      if (gap > 150 && px !== 0 && Math.abs(px) < 30) step = Math.sign(px) * Math.max(Math.abs(step), 1 / 3);
+      Pl.dist = clamp(Pl.dist + step * ZOOM_NOTCH, Math.max(ZOOM_MIN, Pl.camDist - ZOOM_LEAD), Math.min(ZOOM_MAX, Pl.camDist + ZOOM_LEAD));
     }, { passive: false });
     canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   };
@@ -123,8 +124,8 @@
   // (see the cutaway patch in world.js).  Only the wheel changes Pl.dist; Pl.camDist eases
   // toward it over about 0.2 s.
   Pl.updateCamera = function (camera, dt) {
-    Pl.camDist += (Pl.dist - Pl.camDist) * (1 - Math.exp(-dt / 0.06));
-    if (Math.abs(Pl.dist - Pl.camDist) < 0.002) Pl.camDist = Pl.dist;
+    var diff = Pl.dist - Pl.camDist, mv = Math.min(Math.abs(diff), Math.min(ZOOM_SPEED, Math.abs(diff) * 10 + 0.4) * dt);
+    Pl.camDist += Math.sign(diff) * mv;
     if (Pl.fp) {
       var ey = Pl.y + EYE + 0.05;
       camera.position.set(Pl.x, ey, Pl.z);

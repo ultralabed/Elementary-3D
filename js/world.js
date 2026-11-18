@@ -57,7 +57,7 @@
   // Layer = spatial hash of batches (50 m cells)
   function Layer(cell) { this.cell = cell || 50; this.chunks = {}; }
   Layer.prototype.at = function (x, z) {
-    var k = Math.floor((x + 5e4) / this.cell) + ',' + Math.floor((z + 5e4) / this.cell);   // offset: a huge cell is really one chunk
+    var k = Math.floor(x / this.cell + 0.5) + ',' + Math.floor(z / this.cell + 0.5);   // cells centred on the origin: a huge cell is really one chunk
     return this.chunks[k] || (this.chunks[k] = new Batch());
   };
   Layer.prototype.build = function (material, cast, receive, group) {
@@ -250,9 +250,12 @@
   U.piece = function (layer, fn) { var old = U.force; U.force = layer; fn(); U.force = old; };
   // second floor: U.setFloor(1) redirects the layers to the upper-floor set and lifts everything by one storey
   U.yOff = 0;
-  U.setFloor = function (lv) {
-    var c = W.ctx, q = c.sets[lv];
-    c.solid = q.solid; c.ground = q.ground; c.glass = q.glass; c.low = q.low; U.yOff = lv * L.FLOOR_H; L.curLevel = lv;
+  // set 0: ground floor + outdoors, 1: second floor, 2: ground-floor room contents that sit under
+  // the second floor's slab (same height as set 0, but hidden while they cannot be seen)
+  U.setIdx = 0;
+  U.setFloor = function (idx) {
+    var c = W.ctx, q = c.sets[idx], lv = idx === 1 ? 1 : 0;
+    c.solid = q.solid; c.ground = q.ground; c.glass = q.glass; c.low = q.low; U.yOff = lv * L.FLOOR_H; L.curLevel = lv; U.setIdx = idx;
   };
 
   // ------------------------------------------------------------ small props
@@ -298,9 +301,10 @@
   W.build = function (scene) {
     // layer sets: [0] ground floor + outdoors, [1] second floor (hidden while the player is downstairs inside)
     var sets = [{ solid: new Layer(50), ground: new Layer(90), glass: new Layer(60), low: new Layer(1000) },
-                { solid: new Layer(1000), ground: new Layer(1000), glass: new Layer(1000), low: new Layer(1000) }];   // upper floor: one chunk each
+                { solid: new Layer(1000), ground: new Layer(1000), glass: new Layer(1000), low: new Layer(1000) },    // upper floor: one chunk each
+                { solid: new Layer(1000), ground: new Layer(1000), glass: new Layer(1000), low: new Layer(1000) }];   // contents of the ground wings (under the slab)
     var solid = sets[0].solid, ground = sets[0].ground;
-    var ctx = { sets: sets, roof: new Layer(1000), roofUp: new Layer(1000), stair: new Layer(1000), dyn: [], groups: {}, extra: [], extraUp: [] };
+    var ctx = { sets: sets, roof: new Layer(1000), roofUp: new Layer(1000), stair: new Layer(1000), dyn: [], groups: {}, extra: [], extraUp: [], extraUnder: [] };
     W.ctx = ctx; U.setFloor(0);
     var site = S.site;
 
@@ -332,19 +336,23 @@
     var cutMeshes = W.cutMeshes = [];        // solid chunks: patched material only near the line of sight
     var upSwap = W.upSwap = [];              // upper low furniture + upper desks/chairs
     function group(q, extra, upper) {
-      var g = new THREE.Group();
+      var g = new THREE.Group(), inner = g;
+      // upper floor: its furniture, desks and door signs live in a sub-group that is hidden
+      // when nobody could see it (player outside, camera away from the building)
+      if (upper) { inner = W.upperInterior = new THREE.Group(); g.add(inner); }
       q.ground.build(upper ? matPlainCut : matPlain, false, true, g);
-      q.low.build(matPlain, true, true, g).forEach(function (m) { if (upper) upSwap.push(m); });
+      q.low.build(matPlain, true, true, inner).forEach(function (m) { if (upper) upSwap.push(m); });
       if (upper) extra.forEach(function (m) { if (m.isInstancedMesh) upSwap.push(m); });
       q.solid.build(matSolid, true, true, g).forEach(function (m) { cutMeshes.push(m); });
       q.glass.build(matGlass, false, false, g).forEach(function (m) { m.renderOrder = 5; });
-      extra.forEach(function (m) { g.add(m); });
+      extra.forEach(function (m) { inner.add(m); });
       scene.add(g); return g;
     }
     W.groundGroup = group(sets[0], ctx.extra);
     W.upperGroup = group(sets[1], ctx.extraUp, true);
-    // stair flights: part of the floor while the player is on them (never cut), cut-able otherwise
-    W.stairMeshes = ctx.stair.build(matPlain, true, true, W.groundGroup);
+    W.underGroup = group(sets[2], ctx.extraUnder);
+    // stair flights: always cut-able; the floor guard (uCutMinY) keeps the step under the player's feet
+    ctx.stair.build(matPlainCut, true, true, W.groundGroup);
     W.roofGroup = new THREE.Group();          // single-storey roofs (front row, gym, hallway ends)
     ctx.roof.build(matSolid, true, true, W.roofGroup).forEach(function (m) { cutMeshes.push(m); });
     S.interior.finishRoof(ctx, W.roofGroup);
@@ -361,10 +369,12 @@
   // material with the cutaway `discard`; all others use its unpatched twin (same program
   // as the ground).  Called once per frame by main.js.
   var _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
-  W.updateCutMaterials = function (playerUp, onStairs) {
+  // playerY: height of the player's feet; onStairs: in a stair tower; playerUp: standing on the upper floor
+  W.updateCutMaterials = function (playerY, onStairs, playerUp) {
     var on = cut.uCutOn.value > 0.5, list = W.cutMeshes, i;
-    cut.uCutMinY.value = playerUp ? L.FLOOR_H + 0.12 : 0.12;
-    for (i = 0; i < W.stairMeshes.length; i++) { var sm = onStairs ? matPlain : matPlainCut; if (W.stairMeshes[i].material !== sm) W.stairMeshes[i].material = sm; }
+    // floor guard follows the feet: nothing at or below the surface the player stands on is cut
+    // (on a flight the guard clears one riser, so the step underfoot stays and higher steps are cut)
+    cut.uCutMinY.value = playerY + (onStairs ? 0.32 : 0.12);
     for (i = 0; i < W.upSwap.length; i++) {
       var u = W.upSwap[i], wm = u.isInstancedMesh ? (playerUp ? W.matInstanced : W.matInstancedCut) : (playerUp ? matPlain : matPlainCut);
       if (u.material !== wm) u.material = wm;

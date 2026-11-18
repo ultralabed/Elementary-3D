@@ -19,9 +19,9 @@
   var CREAM = '#F7EDD9', RED = L.schoolColor;
 
   // ------------------------------------------------- instanced desks / chairs
-  var desks = [[], []], chairs = [[], []];      // per floor
-  function addDesk(x, z, ry, color, sx, sz) { desks[L.curLevel].push({ y: U.yOff, x: x, z: z, ry: ry || 0, color: color, sx: sx || 1, sz: sz || 1 }); }
-  function addChair(x, z, heading, color) { chairs[L.curLevel].push({ y: U.yOff, x: x, z: z, ry: heading || 0, color: color }); }
+  var desks = [[], [], []], chairs = [[], [], []];      // per layer set (ground, upper, under the slab)
+  function addDesk(x, z, ry, color, sx, sz) { desks[U.setIdx].push({ y: U.yOff, x: x, z: z, ry: ry || 0, color: color, sx: sx || 1, sz: sz || 1 }); }
+  function addChair(x, z, heading, color) { chairs[U.setIdx].push({ y: U.yOff, x: x, z: z, ry: heading || 0, color: color }); }
 
   function makeInstanced(list, geo, material) {
     var mesh = new THREE.InstancedMesh(geo, material, Math.max(1, list.length));
@@ -97,10 +97,10 @@
       box(l, 0, 0.42, 0, 0.4, 0.05, 0.4, '#FFFFFF'); box(l, 0, 0.7, -0.18, 0.4, 0.42, 0.05, '#F0F0F0');
       [[-0.17, -0.17], [0.17, -0.17], [-0.17, 0.17], [0.17, 0.17]].forEach(function (c) { box(l, c[0], 0.2, c[1], 0.035, 0.4, 0.035, '#7A808C'); });
     });
-    [ctx.extra, ctx.extraUp].forEach(function (list, lv) {
+    [ctx.extra, ctx.extraUp, ctx.extraUnder].forEach(function (list, lv) {
       list.push(makeInstanced(desks[lv], deskGeo, S.world.matInstanced)); list.push(makeInstanced(chairs[lv], chairGeo, S.world.matInstanced));
     });
-    I.counts = { desks: desks[0].length + desks[1].length, chairs: chairs[0].length + chairs[1].length };
+    I.counts = { desks: desks[0].length + desks[1].length + desks[2].length, chairs: chairs[0].length + chairs[1].length + chairs[2].length };
   };
 
   // ------------------------------------------------------------------ floors
@@ -341,7 +341,7 @@
   // ----------------------------------------------------------- classroom-like
   function classrooms(ctx, rng) {
     L.bandRooms.forEach(function (r) {
-      U.setFloor(r.level);
+      U.setFloor(r.level ? 1 : 2);             // ground wing rooms: the "under the slab" set
       var ly = ctx.solid, g = ctx.ground, c = r.cl, acc = r.wall;
       // whiteboard on the far wall + tray
       var bw = c.board;

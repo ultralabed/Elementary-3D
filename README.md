@@ -21,6 +21,7 @@ A browser-based cartoon walk-around of the made-up Maple Star Elementary campus.
 | F | talk to a nearby character |
 | M | big map |
 | T | fast time (x5) |
+| N | sound on / off (also the speaker button) |
 | H | help |
 
 Touch: left side joystick, drag on the right to look.
@@ -33,4 +34,4 @@ Map data © OpenStreetMap contributors (ODbL).
 
 ## Code map
 
-`js/site-data.js` ground outline shapes (grounds, parking, roads, houses) - `layout.js` rooms on both floors, stairs, walls, colliders, placements - `world.js` / `interior.js` scenery and building interior (merged geometry + instancing) - `nav.js` waypoint graph and routing - `people.js` roster, schedule, instanced character rendering - `player.js` controls and camera - `hud.js` DOM HUD and minimap - `main.js` renderer, loop, `CAMPUS.debug` test handle.
+`js/site-data.js` ground outline shapes (grounds, parking, roads, houses) - `layout.js` rooms on both floors, stairs, walls, colliders, placements - `world.js` / `interior.js` scenery and building interior (merged geometry + instancing) - `nav.js` waypoint graph and routing - `people.js` roster, schedule, instanced character rendering - `player.js` controls and camera - `hud.js` DOM HUD and minimap - `audio.js` all sound, synthesized with the Web Audio API (no audio files) - `main.js` renderer, loop, `CAMPUS.debug` test handle.

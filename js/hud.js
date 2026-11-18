@@ -6,7 +6,7 @@
   'use strict';
   var S = window.CAMPUS, L = S.layout;
   var H = S.hud = { big: false };
-  var el = {}, last = { place: '', clock: '', period: '', fast: null, prompt: '' }, mapStatic = null, mapKey = '', lastMap = 0, bubbleNpc = null, bubbleUntil = 0, toastUntil = 0;
+  var el = {}, last = { place: '', clock: '', period: '', fast: null, prompt: '' }, mapStatic = null, mapLabels = null, mapKey = '', lastMap = 0, bubbleNpc = null, bubbleUntil = 0, toastUntil = 0;
   var MAP = { x0: -150, x1: 165, z0: -135, z1: 112 };
 
   function $(id) { return document.getElementById(id); }
@@ -53,18 +53,21 @@
     if (w / h > 1.5) { var lw = Math.round(h * 1.276); return [P(0, 0, lw, h, MAP, 0), P(lw, 0, w - lw, h, F2, 1, true)]; }
     var th = Math.round(w / 1.276); return [P(0, 0, w, th, MAP, 0), P(0, th, w, h - th, F2, 1, true)];
   }
+  var SHORT_GRADE = ['PK', 'K', '1', '2', '3', '4', '5'];
+  var SHORT_ROOM = { stem: 'STEM', computer: 'Comp', resource: 'Resource', lounge: 'Lounge', counselor: 'Counsel', hall: 'Main Hallway', uphall: 'Upper Hallway', sidehall: '', office: 'Office', stairW: 'Stairs', stairE: 'Stairs' };
   function roomLabel(r) {
-    var short = ['PK', 'K', '1', '2', '3', '4', '5'];
     if (r.type === 'hall' && r.id.indexOf('wing') === 0) return '';
-    if (r.grade >= 0 && r.sec) return short[r.grade] + r.sec;
-    return { stem: 'STEM', computer: 'Comp', resource: 'Resource', lounge: 'Lounge', counselor: 'Counsel', hall: 'Main Hallway', uphall: 'Upper Hallway', sidehall: '', office: 'Office', stairW: 'Stairs', stairE: 'Stairs' }[r.id] !== undefined
-      ? { stem: 'STEM', computer: 'Comp', resource: 'Resource', lounge: 'Lounge', counselor: 'Counsel', hall: 'Main Hallway', uphall: 'Upper Hallway', sidehall: '', office: 'Office', stairW: 'Stairs', stairE: 'Stairs' }[r.id] : r.name;
+    if (r.grade >= 0 && r.sec) return SHORT_GRADE[r.grade] + r.sec;
+    return SHORT_ROOM[r.id] !== undefined ? SHORT_ROOM[r.id] : r.name;
   }
+  // panel layouts are cached per canvas size / mode / level
+  var panelCache = {};
+  function getPanels(w, h, big, level) { var k = w + 'x' + h + big + level; return panelCache[k] || (panelCache[k] = panels(w, h, big, level)); }
 
   // static map layer (cached): terrain, zones, building rooms of the panel's level
   function drawStatic(w, h, big, level) {
     var cv = document.createElement('canvas'); cv.width = w; cv.height = h; var c = cv.getContext('2d');
-    panels(w, h, big, level).forEach(function (p) {
+    getPanels(w, h, big, level).forEach(function (p) {
       var X = p.X, Z = p.Z;
       function rect(x0, z0, x1, z1, fill, stroke) { c.fillStyle = fill; c.fillRect(X(x0), Z(z0), X(x1) - X(x0), Z(z1) - Z(z0)); if (stroke) { c.strokeStyle = stroke; c.lineWidth = 1; c.strokeRect(X(x0), Z(z0), X(x1) - X(x0), Z(z1) - Z(z0)); } }
       function polyPath(pts) { c.beginPath(); pts.forEach(function (q, i) { if (i) c.lineTo(X(q[0]), Z(q[1])); else c.moveTo(X(q[0]), Z(q[1])); }); c.closePath(); }
@@ -98,43 +101,54 @@
       c.font = '800 ' + (fs + (big ? 3 : 1)) + 'px "Trebuchet MS", system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
       var tag = p.level ? 'Floor 2' : 'Floor 1', tw = c.measureText(tag).width;
       c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(p.x + 4, p.y + 4, tw + 10, fs + 9); c.fillStyle = L.schoolColor; c.fillText(tag, p.x + 9, p.y + 7);
-      if (big) {
-        c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#1f2a44';
-        var rs = p.zoom ? Math.max(9, Math.round(p.w / 46)) : fs;
-        L.rooms.forEach(function (r) {
-          if (r.level !== p.level && r.level !== 2) return;
-          var t = roomLabel(r); if (!t) return;
-          c.font = '700 ' + (r.type === 'class' ? rs - 1 : rs) + 'px "Trebuchet MS", system-ui, sans-serif'; c.fillText(t, X(r.cx), Z(r.cz));
-        });
-        if (!p.zoom) {
-          c.font = '800 ' + (fs + 2) + 'px "Trebuchet MS", system-ui, sans-serif'; c.fillStyle = '#16345e';
-          [['Playground', -10, -55], ['Sports Field', -90, -35], ['Basketball', 34, -51], ['Garden', 69, -17.5], ['Pavilion', -48, -46], ['Parking', 100, -30], ['Courtyard', 34, -12],
-            ['Drop-off Lane', 20, 62], ['Maple Boulevard', 20, 97], ['Star Lane', -47, 109], ['Front Lawn', 8, 50]].forEach(function (q) { c.fillText(q[0], X(q[1]), Z(q[2])); });
-          c.fillStyle = L.schoolColor; c.fillText('MAPLE STAR ELEMENTARY', X(8), Z(46));
-        } else {
-          c.font = '800 ' + (rs + 3) + 'px "Trebuchet MS", system-ui, sans-serif'; c.fillStyle = '#16345e';
-          c.fillText('Second floor: grades 3-5, Art, STEM, Computer Lab', p.x + p.w / 2, Z(F2.z1) + rs * 0.2);
-          c.strokeStyle = 'rgba(31,42,68,.25)'; c.lineWidth = 2; c.strokeRect(p.x + 1, p.y + 1, p.w - 2, p.h - 2);
-        }
-      }
       c.restore();
+    });
+    return cv;
+  }
+
+  // big-map labels: drawn on their own transparent layer ABOVE the people dots, with a light halo
+  function drawLabels(w, h, level) {
+    var cv = document.createElement('canvas'); cv.width = w; cv.height = h; var c = cv.getContext('2d');
+    c.lineJoin = 'round'; c.strokeStyle = 'rgba(255,255,255,.85)';
+    function text(t, x, y) { c.lineWidth = 3; c.strokeText(t, x, y); c.fillText(t, x, y); }
+    getPanels(w, h, true, level).forEach(function (p) {
+      var X = p.X, Z = p.Z, fs = Math.max(8, Math.round(p.h * 1.276 / 90)), rs = p.zoom ? Math.max(9, Math.round(p.w / 46)) : fs;
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#1f2a44';
+      L.rooms.forEach(function (r) {
+        if (r.level !== p.level && r.level !== 2) return;
+        var t = roomLabel(r); if (!t) return;
+        c.font = '700 ' + (r.type === 'class' ? rs - 1 : rs) + 'px "Trebuchet MS", system-ui, sans-serif'; text(t, X(r.cx), Z(r.cz));
+      });
+      if (!p.zoom) {
+        c.font = '800 ' + (fs + 2) + 'px "Trebuchet MS", system-ui, sans-serif'; c.fillStyle = '#16345e';
+        [['Playground', -10, -55], ['Sports Field', -90, -35], ['Basketball', 34, -51], ['Garden', 69, -17.5], ['Pavilion', -48, -46], ['Parking', 100, -30], ['Courtyard', 34, -12],
+          ['Drop-off Lane', 20, 62], ['Maple Boulevard', 20, 97], ['Star Lane', -47, 109], ['Front Lawn', 8, 50]].forEach(function (q) { text(q[0], X(q[1]), Z(q[2])); });
+        c.fillStyle = L.schoolColor; text('MAPLE STAR ELEMENTARY', X(8), Z(46));
+      } else {
+        c.font = '800 ' + (rs + 3) + 'px "Trebuchet MS", system-ui, sans-serif'; c.fillStyle = '#16345e';
+        text('Second floor: grades 3-5, Art, STEM, Computer Lab', p.x + p.w / 2, Z(F2.z1) + rs * 0.2);
+        c.strokeStyle = 'rgba(31,42,68,.25)'; c.lineWidth = 2; c.strokeRect(p.x + 1, p.y + 1, p.w - 2, p.h - 2); c.strokeStyle = 'rgba(255,255,255,.85)';
+      }
     });
     return cv;
   }
 
   function drawMap(player, npcs) {
     var cv = el.mapCanvas, w = cv.width, h = cv.height, c = el.ctx, lvl = (player.inside && player.level) ? 1 : 0, key = w + 'x' + h + H.big + lvl;
-    if (!mapStatic || mapKey !== key) { mapStatic = drawStatic(w, h, H.big, lvl); mapKey = key; }
+    if (!mapStatic || mapKey !== key) { mapStatic = drawStatic(w, h, H.big, lvl); mapLabels = H.big ? drawLabels(w, h, lvl) : null; mapKey = key; }
     c.drawImage(mapStatic, 0, 0);
-    var me = S.people.player(), ps = panels(w, h, H.big, lvl);
+    var me = S.people.player(), ps = getPanels(w, h, H.big, lvl);
     for (var k = 0; k < ps.length; k++) {
-      var p = ps[k], r = Math.max(1.5, (p.zoom ? 2.2 : 1) * w / (H.big ? 300 : 110));
+      var p = ps[k], r = Math.max(1.5, (p.zoom ? 1.6 : 1) * w / (H.big ? 420 : 110));
       for (var i = 0; i < npcs.length; i++) {
         var n = npcs[i]; if (n.hidden || n === me || n.level !== p.level) continue;
         c.fillStyle = n.kind === 'staff' ? '#2D5BD6' : '#F2A60C';
         c.fillRect(p.X(n.x) - r / 2, p.Z(n.z) - r / 2, r, r);
       }
-      if (p.level !== lvl) continue;
+    }
+    if (mapLabels) c.drawImage(mapLabels, 0, 0);            // labels stay readable above the dots
+    for (k = 0; k < ps.length; k++) {
+      p = ps[k]; if (p.level !== lvl) continue;
       // player arrow (forward = avatar heading)
       var s = Math.max(5, w / (H.big ? 110 : 32)), a = player.heading;
       c.save(); c.translate(p.X(player.x), p.Z(player.z)); c.rotate(-a + Math.PI); // heading 0 = +Z = map down

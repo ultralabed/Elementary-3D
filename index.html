@@ -19,16 +19,17 @@
 </div>
 
 <div id="hints">
-  <div id="hintLine"><b>WASD</b> move &middot; <b>Shift</b> run &middot; <b>drag</b> look &middot; <b>F</b> talk &middot; <b>H</b> help</div>
+  <div id="hintLine"><b>WASD</b> move &middot; <b>Shift</b> run &middot; <b>drag</b> look &middot; <b>F</b> talk &middot; <b>N</b> sound &middot; <b>H</b> help</div>
   <div id="credit">&copy; OpenStreetMap contributors</div>
 </div>
 
 <div id="talkPrompt" hidden></div>
 <div id="bubble" hidden></div>
 <div id="toast" hidden></div>
-<div id="touchBtns" hidden>
-  <button type="button" id="btnTalk" class="tbtn" disabled>Talk</button>
-  <button type="button" id="btnHelp" class="tbtn" aria-label="Help">?</button>
+<div id="touchBtns">
+  <button type="button" id="btnTalk" class="tbtn" disabled hidden>Talk</button>
+  <button type="button" id="btnHelp" class="tbtn" aria-label="Help" hidden>?</button>
+  <button type="button" id="btnMute" class="tbtn" aria-pressed="false" aria-label="Sound on - mute"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path class="waves" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="slash" d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
 </div>
 <div id="joy" hidden><div id="joyKnob"></div></div>
 
@@ -42,6 +43,7 @@
       <li><b>Wheel</b>: zoom &middot; <b>V</b>: first person</li>
       <li><b>F</b>: talk to a nearby character</li>
       <li><b>M</b>: big map &middot; <b>T</b>: fast time (x5)</li>
+      <li><b>N</b> or the speaker button: sound on / off</li>
       <li><b>H</b>: this help</li>
     </ul>
     <div>
@@ -83,6 +85,7 @@
 <script src="js/people.js"></script>
 <script src="js/player.js"></script>
 <script src="js/hud.js"></script>
+<script src="js/audio.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
