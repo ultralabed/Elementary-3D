@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Maple Star Elementary 3D</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!-- HUD markup (the WebGL canvas is inserted at the top of <body> by main.js) -->
+<div id="hud" aria-live="off">
+  <div id="place">Front Lawn</div>
+  <div id="clockRow"><span id="clock">7:38 AM</span><span id="period">Arrival</span><span id="speedTag" hidden>x5</span></div>
+</div>
+
+<div id="minimap" aria-label="Map">
+  <canvas id="mapCanvas" width="320" height="250"></canvas>
+  <div id="mapHint">M: big map</div>
+</div>
+
+<div id="hints">
+  <div id="hintLine"><b>WASD</b> move &middot; <b>Shift</b> run &middot; <b>drag</b> look &middot; <b>F</b> talk &middot; <b>H</b> help</div>
+  <div id="credit">&copy; OpenStreetMap contributors</div>
+</div>
+
+<div id="talkPrompt" hidden></div>
+<div id="bubble" hidden></div>
+<div id="toast" hidden></div>
+<div id="touchBtns" hidden>
+  <button type="button" id="btnTalk" class="tbtn" disabled>Talk</button>
+  <button type="button" id="btnHelp" class="tbtn" aria-label="Help">?</button>
+</div>
+<div id="joy" hidden><div id="joyKnob"></div></div>
+
+<section id="help" class="panel" hidden role="dialog" aria-label="Help">
+  <h2>Help</h2>
+  <div class="cols">
+    <ul class="keys">
+      <li><b>W A S D</b> / arrows: walk (relative to the camera)</li>
+      <li><b>Shift</b>: run</li>
+      <li><b>Mouse drag</b>, <b>Q E</b> or <b>&larr; &rarr;</b>: look around</li>
+      <li><b>Wheel</b>: zoom &middot; <b>V</b>: first person</li>
+      <li><b>F</b>: talk to a nearby character</li>
+      <li><b>M</b>: big map &middot; <b>T</b>: fast time (x5)</li>
+      <li><b>H</b>: this help</li>
+    </ul>
+    <div>
+      <p class="sched-title">Pretend school day (not the real schedule)</p>
+      <table class="sched">
+        <tr><td>7:30</td><td>Arrival &ndash; buses and drop-off</td></tr>
+        <tr><td>8:00</td><td>Morning classes</td></tr>
+        <tr><td>9:00&ndash;10:45</td><td>Specials: PK&ndash;1 at 9:00, 2&ndash;3 at 10:00</td></tr>
+        <tr><td>11:00</td><td>Lunch then recess: PK&ndash;1 11:00, 2&ndash;3 11:30, 4&ndash;5 12:00</td></tr>
+        <tr><td>1:30</td><td>Specials for grades 4&ndash;5</td></tr>
+        <tr><td>2:45</td><td>Dismissal &ndash; buses and pick-up</td></tr>
+      </table>
+    </div>
+  </div>
+  <button type="button" id="helpClose" class="btn">Close</button>
+</section>
+
+<section id="overlay" role="dialog" aria-labelledby="ovTitle">
+  <div class="card">
+    <h1 id="ovTitle">Maple Star Elementary 3D</h1>
+    <p class="lead">Walk around the made-up cartoon campus of Maple Star Elementary and watch a pretend school day.</p>
+    <ul class="keys">
+      <li><b>W A S D</b> move &middot; <b>Shift</b> run</li>
+      <li><b>Drag</b> / <b>Q E</b> look &middot; <b>Wheel</b> zoom &middot; <b>V</b> first person</li>
+      <li><b>F</b> talk &middot; <b>M</b> map &middot; <b>T</b> fast time &middot; <b>H</b> help</li>
+    </ul>
+    <button type="button" id="startBtn" class="btn primary" disabled>Start exploring</button>
+    <p class="disclaimer">A made-up cartoon school. Ground shapes are based on OpenStreetMap data; the building, rooms and everyone in it are fictional.</p>
+    <p id="loadMsg" class="loadmsg">Loading&hellip;</p>
+  </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/site-data.js"></script>
+<script src="js/layout.js"></script>
+<script src="js/world.js"></script>
+<script src="js/interior.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/people.js"></script>
+<script src="js/player.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

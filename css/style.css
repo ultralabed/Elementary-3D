@@ -1,0 +1,138 @@
+/* Maple Star Elementary 3D - HUD styling.  Single bright daytime look. */
+:root {
+  --hud-bg: rgba(255, 255, 255, 0.88);
+  --hud-ink: #1f2a44;
+  --hud-dim: #5c6785;
+  --hud-line: rgba(31, 42, 68, 0.14);
+  --accent: #E20A19;
+  --accent-ink: #ffffff;
+  --sky: #cfe8fa;
+  --panel-shadow: 0 6px 20px rgba(31, 42, 68, 0.25);
+  --focus: #1b5fd6;
+  --gutter: 12px;
+}
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden; background: var(--sky); color: var(--hud-ink);
+  font-family: "Trebuchet MS", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  -webkit-user-select: none; user-select: none; touch-action: none;
+}
+canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+[hidden] { display: none !important; }
+
+/* top-left: place + clock */
+#hud {
+  position: fixed; top: calc(var(--gutter) + env(safe-area-inset-top, 0px)); left: calc(var(--gutter) + env(safe-area-inset-left, 0px));
+  background: var(--hud-bg); padding: 8px 14px 9px; border-radius: 16px; box-shadow: var(--panel-shadow);
+  max-width: calc(100vw - 2 * var(--gutter) - 24px); pointer-events: none; border: 2px solid var(--accent);
+}
+#place { font-weight: 800; font-size: 1.15rem; line-height: 1.2; }
+#clockRow { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; color: var(--hud-dim); font-size: 0.9rem; }
+#clock { font-weight: 800; color: var(--hud-ink); font-variant-numeric: tabular-nums; }
+#speedTag { background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 0 6px; font-weight: 800; font-size: 0.75rem; }
+
+/* bottom-right: minimap */
+#minimap {
+  position: fixed; right: calc(var(--gutter) + env(safe-area-inset-right, 0px)); bottom: calc(var(--gutter) + env(safe-area-inset-bottom, 0px));
+  background: var(--hud-bg); border-radius: 14px; padding: 5px; box-shadow: var(--panel-shadow); border: 2px solid var(--accent);
+  transition: none;
+}
+#mapCanvas { display: block; width: 190px; height: 149px; border-radius: 9px; }
+#mapHint { font-size: 0.68rem; color: var(--hud-dim); text-align: center; padding-top: 2px; }
+#minimap.big {
+  right: 50%; bottom: 50%; transform: translate(50%, 50%); z-index: 6; padding: 8px;
+}
+/* big map: campus + 1st floor on the left, 2nd floor plan on the right (stacked on narrow screens) */
+#minimap.big #mapCanvas { width: min(94vw, 1180px, calc(80vh * 2.2)); height: auto; aspect-ratio: 22 / 10; }
+@media (max-width: 700px) { #minimap.big #mapCanvas { width: min(92vw, calc(80vh * 0.724)); aspect-ratio: 320 / 442; } }
+#minimap.big #mapHint { font-size: 0.85rem; }
+
+/* bottom-left: hints + credit */
+#hints {
+  position: fixed; left: calc(var(--gutter) + env(safe-area-inset-left, 0px)); bottom: calc(var(--gutter) + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100vw - 260px); pointer-events: none;
+}
+#hintLine { background: var(--hud-bg); padding: 6px 10px; border-radius: 12px; font-size: 0.78rem; color: var(--hud-dim); box-shadow: var(--panel-shadow); }
+#hintLine b { color: var(--hud-ink); }
+#credit { font-size: 0.66rem; color: #1f2a44; background: rgba(255,255,255,0.7); display: inline-block; padding: 1px 6px; border-radius: 6px; margin-top: 4px; }
+
+/* prompts */
+#talkPrompt, #toast {
+  position: fixed; left: 50%; transform: translateX(-50%); background: var(--hud-bg); padding: 7px 16px; border-radius: 999px;
+  font-weight: 700; box-shadow: var(--panel-shadow); pointer-events: none; text-align: center; max-width: 90vw;
+}
+#talkPrompt { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); border: 2px solid var(--accent); }
+#toast { top: calc(60px + env(safe-area-inset-top, 0px)); }
+#bubble {
+  position: fixed; transform: translate(-50%, -100%); background: #fff; color: var(--hud-ink); padding: 8px 12px; border-radius: 16px;
+  font-weight: 700; font-size: 0.95rem; box-shadow: var(--panel-shadow); max-width: min(260px, 70vw); text-align: center; pointer-events: none; border: 2px solid var(--accent);
+}
+#bubble::after { content: ""; position: absolute; left: 50%; bottom: -9px; margin-left: -8px; border: 8px solid transparent; border-top-color: var(--accent); border-bottom: 0; }
+
+/* panels */
+.panel {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 7; background: #fff; border-radius: 18px;
+  padding: 16px 20px; box-shadow: var(--panel-shadow); border: 3px solid var(--accent); max-width: min(720px, 92vw); max-height: 86vh; overflow: auto;
+  -webkit-user-select: text; user-select: text;
+}
+.panel h2 { margin: 0 0 8px; }
+.cols { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.cols > * { flex: 1 1 260px; }
+.keys { padding-left: 18px; margin: 6px 0; line-height: 1.55; }
+.sched-title { font-weight: 800; margin: 6px 0 4px; }
+.sched { border-collapse: collapse; font-size: 0.88rem; }
+.sched td { padding: 3px 8px 3px 0; vertical-align: top; border-bottom: 1px solid var(--hud-line); }
+.sched td:first-child { font-weight: 800; white-space: nowrap; }
+
+/* start overlay */
+#overlay {
+  position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+  background: linear-gradient(180deg, rgba(207, 232, 250, 0.1), rgba(31, 42, 68, 0.28)); box-sizing: border-box;
+}
+#overlay .card {
+  background: rgba(255, 255, 255, 0.94); border-radius: 22px; border: 4px solid var(--accent); box-shadow: var(--panel-shadow);
+  padding: 20px 26px; max-width: 520px; width: 100%; box-sizing: border-box; text-align: center; max-height: 100%; overflow: auto;
+  -webkit-user-select: text; user-select: text;
+}
+#overlay h1 { margin: 0 0 6px; font-size: clamp(1.5rem, 6vw, 2.2rem); color: var(--accent); letter-spacing: 0.5px; }
+#overlay .lead { margin: 0 0 6px; color: var(--hud-dim); }
+#overlay .keys { text-align: left; display: inline-block; font-size: 0.92rem; margin-bottom: 10px; }
+.disclaimer { font-size: 0.78rem; color: var(--hud-dim); margin: 12px 0 0; line-height: 1.4; }
+.loadmsg { font-size: 0.75rem; color: var(--hud-dim); margin: 6px 0 0; min-height: 1em; }
+
+.btn {
+  font: inherit; font-weight: 800; border: 2px solid var(--accent); background: #fff; color: var(--accent); padding: 8px 18px; border-radius: 999px; cursor: pointer; margin-top: 8px;
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); font-size: 1.1rem; padding: 10px 26px; animation: pulse 1.8s ease-in-out infinite; }
+.btn:hover { filter: brightness(1.06); }
+.btn:focus-visible, #startBtn:focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
+.btn:disabled { opacity: 0.6; animation: none; cursor: progress; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+
+/* touch-only buttons (shown by main.js) */
+#touchBtns { position: fixed; right: calc(var(--gutter) + env(safe-area-inset-right, 0px)); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+.tbtn { font: inherit; font-weight: 800; min-width: 54px; min-height: 44px; border-radius: 999px; border: 2px solid var(--accent); background: var(--hud-bg); color: var(--accent); padding: 4px 12px; box-shadow: var(--panel-shadow); touch-action: manipulation; }
+.tbtn:disabled { opacity: 0.45; }
+.tbtn:focus-visible { outline: 4px solid var(--focus); outline-offset: 2px; }
+
+/* touch joystick */
+#joy { position: fixed; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%; background: rgba(255,255,255,0.35); border: 3px solid rgba(255,255,255,0.8); pointer-events: none; z-index: 5; }
+#joyKnob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(226, 10, 25, 0.75); }
+
+@media (max-width: 520px) {
+  :root { --gutter: 8px; }
+  #place { font-size: 1rem; }
+  #clockRow { font-size: 0.8rem; }
+  #mapCanvas { width: 128px; height: 100px; }
+  #mapHint { display: none; }
+  #hints { max-width: calc(100vw - 170px); }
+  #talkPrompt { bottom: calc(118px + env(safe-area-inset-bottom, 0px)); }
+  #hintLine { font-size: 0.68rem; padding: 4px 8px; }
+  #overlay .card { padding: 14px 16px; }
+  .panel { padding: 12px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn.primary { animation: none; }
+  * { transition: none !important; }
+}
