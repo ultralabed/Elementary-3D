@@ -598,11 +598,13 @@
       for (i = 0; i < boxes.length; i++) {
         b = boxes[i];
         if (!b.h || b.lv !== level) continue;
-        if (x < b.x0 - r || x > b.x1 + r || z < b.z0 - r || z > b.z1 + r) continue;
+        if ((x < b.x0 - r && xi < b.x0 - r) || (x > b.x1 + r && xi > b.x1 + r) || (z < b.z0 - r && zi < b.z0 - r) || (z > b.z1 + r && zi > b.z1 + r)) continue;
         cx = x < b.x0 ? b.x0 : (x > b.x1 ? b.x1 : x); cz = z < b.z0 ? b.z0 : (z > b.z1 ? b.z1 : z);
         dx = x - cx; dz = z - cz; d2 = dx * dx + dz * dz;
-        if (d2 >= r * r - 1e-9) continue;
-        if (d2 > 1e-9) { d = Math.sqrt(d2); k = (r - d) / d; x += dx * k; z += dz * k; }
+        // pushed right through the wall by furniture?  (the way from where the move started to here crosses it)
+        var through = d2 > 1e-9 && segEntry(xi, zi, x, z, b.x0, b.z0, b.x1, b.z1) >= 0;
+        if (d2 >= r * r - 1e-9 && !through) continue;
+        if (d2 > 1e-9 && !through) { d = Math.sqrt(d2); k = (r - d) / d; x += dx * k; z += dz * k; }
         else {
           var ax = xi < b.x0 ? b.x0 : (xi > b.x1 ? b.x1 : xi), az = zi < b.z0 ? b.z0 : (zi > b.z1 ? b.z1 : zi);
           var nx = xi - ax, nz = zi - az, nl = Math.hypot(nx, nz);

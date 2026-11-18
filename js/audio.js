@@ -26,7 +26,7 @@
   var PENTA = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
   // scratch state for the crowd scan (reused every tick)
   var bestN = [null, null, null, null, null, null], bestW = [0, 0, 0, 0, 0, 0], bestMuf = [false, false, false, false, false, false], bestCount = 0;
-  var tick = 0, lastBlock = '', lastBell = -10, nextBird = 3, nextSqueal = 4, nextThump = 1, nextNote = 1, stepIndex = 0, recessNear = 0, gymLevel = 0, musicLevel = 0;
+  var tick = 0, lastBlock = '', lastBell = -10, nextBird = 3, nextSqueal = 4, nextThump = 1, nextNote = 1, stepTimer = 0, recessNear = 0, gymLevel = 0, musicLevel = 0;
 
   function rnd(a, b) { return a + Math.random() * (b - a); }
 
@@ -74,7 +74,8 @@
     limiter.threshold.value = -14; limiter.knee.value = 8; limiter.ratio.value = 14; limiter.attack.value = 0.003; limiter.release.value = 0.2;
     var out = gainNode(0.9, ctx.destination);                  // head-room after the limiter's make-up gain
     limiter.connect(out);
-    analyser = ctx.createAnalyser(); analyser.fftSize = 2048; out.connect(analyser); peakBuf = new Float32Array(analyser.fftSize);
+    analyser = ctx.createAnalyser(); analyser.fftSize = 32768;       // about 0.7 s: peak() also catches short taps
+    out.connect(analyser); peakBuf = new Float32Array(analyser.fftSize);
     master = gainNode(A.muted ? 0 : MASTER, limiter);
     crowdBus = gainNode(1, master); sfxBus = gainNode(1, master); ambBus = gainNode(1, master);
     // babble pool + one extra voice for the "talk" blip
@@ -87,7 +88,7 @@
     wind = { gain: gainNode(0, ambBus) }; wind.f = filter('lowpass', 420, 0.4, wind.gain); noiseSource(wind.f);
     room = { gain: gainNode(0, ambBus) }; noiseSource(filter('bandpass', 140, 0.8, room.gain));
     // footsteps: a noise tap and a wooden knock (stairs), both always running behind closed envelopes
-    tap = { env: gainNode(0, sfxBus) }; tap.f = filter('bandpass', 1800, 1.2, tap.env); noiseSource(tap.f);
+    tap = { env: gainNode(0, sfxBus) }; tap.f = filter('lowpass', 600, 0.6, tap.env); noiseSource(tap.f);
     knock = { env: gainNode(0, sfxBus) }; knock.osc = osc('triangle', 170, knock.env);
     // gym ball
     thump = { env: gainNode(0, sfxBus) }; thump.osc = osc('sine', 80, thump.env);
@@ -123,15 +124,18 @@
     v.pitch = staff ? rnd(180, 240) : rnd(300, 430); v.size = staff ? 1.0 : 1.18;
     for (var i = 0; i < n; i++) { syllable(v, t, 0.5, 0.17); t += 0.19; }
   };
+  // Footsteps are deliberately quiet, dull taps (low-passed noise, 8 ms+ attack, no click) that
+  // sit below the room tone and babble; each step varies a little in level and tone, and
+  // running is only slightly louder than walking.
   function footstep(surface, running) {
-    var t = ctx.currentTime + 0.005, vol = running ? 0.22 : 0.15;
-    if (surface === 2) {                                    // stairs: hollow knock + a little tap
-      knock.osc.frequency.setValueAtTime(190, t); knock.osc.frequency.exponentialRampToValueAtTime(120, t + 0.07);
-      knock.env.gain.setTargetAtTime(vol * 0.9, t, 0.004); knock.env.gain.setTargetAtTime(0, t + 0.03, 0.025);
-      tap.f.frequency.setValueAtTime(1200, t); vol *= 0.4;
-    } else if (surface === 1) tap.f.frequency.setValueAtTime(2100, t);                  // tile
-    else { tap.f.frequency.setValueAtTime(520, t); vol *= 1.3; }                       // grass / path
-    tap.env.gain.setTargetAtTime(vol, t, 0.003); tap.env.gain.setTargetAtTime(0, t + (surface ? 0.02 : 0.045), surface ? 0.012 : 0.03);
+    var t = ctx.currentTime + 0.005, vol = (running ? 0.036 : 0.03) * rnd(0.8, 1.15), tone = rnd(0.88, 1.12);
+    if (surface === 2) {                                    // stairs: a soft low knock under the tap
+      knock.osc.frequency.setValueAtTime(150 * tone, t); knock.osc.frequency.exponentialRampToValueAtTime(105 * tone, t + 0.09);
+      knock.env.gain.setTargetAtTime(vol * 0.8, t, 0.01); knock.env.gain.setTargetAtTime(0, t + 0.035, 0.035);
+      tap.f.frequency.setTargetAtTime(420 * tone, t, 0.005); vol *= 0.6;
+    } else if (surface === 1) tap.f.frequency.setTargetAtTime(620 * tone, t, 0.005);     // tile / floor
+    else { tap.f.frequency.setTargetAtTime(330 * tone, t, 0.005); vol *= 1.15; }          // grass / path
+    tap.env.gain.setTargetAtTime(vol, t, 0.009); tap.env.gain.setTargetAtTime(0, t + 0.03, 0.04);
   }
 
   // ------------------------------------------------------- the crowd scan
@@ -212,11 +216,14 @@
       syllable(v, t + 0.01, v.level * rnd(0.6, 1), dur);
       v.next = t + dur + (Math.random() < 0.22 ? rnd(0.3, 1.3) : 0.015);
     }
-    // footsteps: one tap per half swing of the legs
+    // footsteps: paced by the player's speed, never faster than 3.2 steps a second
     if (Pl.moving) {
-      var si = Math.floor(Pl.phase / Math.PI);
-      if (si !== stepIndex) { stepIndex = si; footstep(L.stairAt(Pl.x, Pl.z) ? 2 : Pl.inside ? 1 : 0, Pl.running); }
-    }
+      stepTimer -= dt;
+      if (stepTimer <= 0) {
+        var rate = Math.max(1.6, Math.min(3.2, (Pl.speed || 4) * 0.37));          // steps per second
+        stepTimer = 1 / rate; footstep(L.stairAt(Pl.x, Pl.z) ? 2 : Pl.inside ? 1 : 0, Pl.running);
+      }
+    } else stepTimer = 0.12;
     // occasional one-shots
     if (A.ambience === 'out') {
       nextBird -= dt;

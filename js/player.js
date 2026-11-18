@@ -13,7 +13,7 @@
     x: 8, z: 54, y: 0, level: 0, heading: Math.PI, yaw: 0, pitch: 0.52, dist: 7.5, fp: false, inside: false,
     moving: false, running: false, speed: 0, phase: 0, camDist: 7.5, hideAvatar: false, enabled: false, on: {}
   };
-  var RADIUS = 0.35, WALK = 4, RUN = 8, EYE = 1.12;
+  var RADIUS = 0.35, WALK = 5.4, RUN = 12, STAIR_MAX = 8, EYE = 1.12;   // m/s; on a stair flight speed is capped so the climb stays smooth
   var lastWheel = -1e9, ZOOM_LEAD = 3, ZOOM_SPEED = 3;      // target may lead by 3 m; camera moves at most 3 m/s
   var ZOOM_MIN = 3, ZOOM_MAX = 16, ZOOM_NOTCH = 0.6;      // metres; one wheel notch = 0.6 m
   var keys = {}, joy = { x: 0, z: 0, id: null, ox: 0, oy: 0 }, drag = { id: null, x: 0, y: 0 };
@@ -99,6 +99,7 @@
     Pl.running = !!(keys.ShiftLeft || keys.ShiftRight) || Math.hypot(joy.x, joy.z) > 0.9;
     if (ml > 0.05) {
       var spd = (Pl.running ? RUN : WALK) * Math.min(1, ml);
+      if (L.stairAt(Pl.x, Pl.z)) spd = Math.min(spd, STAIR_MAX);
       mx /= ml; mz /= ml;
       var total = spd * dt, steps = Math.max(1, Math.ceil(total / 0.1)), sx = mx * total / steps, sz = mz * total / steps;
       var ox = Pl.x, oz = Pl.z;
@@ -111,7 +112,7 @@
       // face the direction of travel (smoothly)
       var target = Math.atan2(mx, mz), da = Math.atan2(Math.sin(target - Pl.heading), Math.cos(target - Pl.heading));
       Pl.heading += da * Math.min(1, dt * 12);
-      Pl.phase += dt * Pl.speed * 3.6;
+      Pl.phase += dt * Pl.speed * 2.7;        // leg swing follows the speed (longer strides than before)
     } else { Pl.speed = 0; Pl.moving = false; }
     L.surface(Pl);
     Pl.inside = L.insideBuilding(Pl.x, Pl.z, Pl.level);
