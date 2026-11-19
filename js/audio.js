@@ -27,6 +27,7 @@
   'use strict';
   var S = window.CAMPUS = window.CAMPUS || {}, L = S.layout;
   var A = S.audio = { ok: false, muted: false, crowdLevel: 0, activeVoices: 0, ambience: 'out', bells: 0, decoded: 0, spoken: 0 };
+  var CROWD_DIV = 3.5 * (((S.config && S.config.studentsPerClass) || 8) / 8);
   var MASTER = 0.8, NAMES = ['classroom', 'kids', 'cafeteria'], XFADE = 1.5, MIN_LEVEL = 0.03;
   var ctx = null, master, limiter, analyser, peakBuf, crowdBus, sfxBus, ambBus;
   var crowdPan, crowdHS, crowdLP, layers = {}, fallback = null, loadDone = false;
@@ -239,7 +240,7 @@
       sum += w; if (same) sumSame += w; if (act <= 0.12) sumQuiet += w;
       cdx += w * dx; cdz += w * dz;
     }
-    var lvl = A.crowdLevel = 1 - Math.exp(-sum / 3.5), t = ctx.currentTime;
+    var lvl = A.crowdLevel = 1 - Math.exp(-sum / CROWD_DIV), t = ctx.currentTime;   // CROWD_DIV: more children per class, same loudness per place
     var sameFrac = sum > 1e-6 ? sumSame / sum : 1, lesson = sum > 1e-6 ? sumQuiet / sum : 0;
     var out = !Pl.inside;
     // ---- recorded layers

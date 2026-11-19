@@ -212,7 +212,7 @@
     // advance only the simulation (no rendering) - used by tests
     simulate: function (seconds, dt, cb) {
       dt = dt || 0.1; var fakeCam = { position: new THREE.Vector3(0, 0, 0) };
-      for (var t = 0; t < seconds; t += dt) { P.update(dt, fakeCam, Pl.x, Pl.z, Pl.level); if (cb) cb(t); }
+      for (var t = 0; t < seconds; t += dt) { S.world.update(dt, fakeCam, null); P.update(dt, fakeCam, Pl.x, Pl.z, Pl.level); if (cb) cb(t); }
     },
     npcs: function () { return P.list.filter(function (n) { return n !== P.player(); }); },
     renderInfo: function () { return { calls: info.calls, triangles: info.triangles }; },

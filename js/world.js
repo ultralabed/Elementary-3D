@@ -484,33 +484,38 @@
     flat(g, z.x0, z.z0, z.x0 + 0.3, z.z1, 0.1, '#8C6B4A'); flat(g, z.x1 - 0.3, z.z0, z.x1, z.z1, 0.1, '#8C6B4A');
     // slide tower: 4 posts, platform, roof, ladder, slide
     var t = P.tower, red = L.schoolColor;
-    [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]].forEach(function (c) { box(ly, t.x + c[0], 1.4, t.z + c[1], 0.2, 2.8, 0.2, '#3E8EDE'); });
+    [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]].forEach(function (c) { box(ly, t.x + c[0], 1.9, t.z + c[1], 0.2, 3.8, 0.2, '#3E8EDE'); });
     box(ly, t.x, 1.7, t.z, 2.7, 0.15, 2.7, '#FFD23F');
-    box(ly, t.x, 2.8, t.z, 3.0, 0.2, 3.0, red);
-    box(ly, t.x, 2.95, t.z, 2.0, 0.2, 2.0, '#FF6B6B');
+    box(ly, t.x, 3.8, t.z, 3.0, 0.2, 3.0, red);
+    box(ly, t.x, 3.95, t.z, 2.0, 0.2, 2.0, '#FF6B6B');
+    box(ly, t.x, 2.35, t.z + 1.25, 2.5, 0.08, 0.08, '#3E8EDE'); box(ly, t.x - 1.25, 2.35, t.z, 0.08, 0.08, 2.5, '#3E8EDE'); box(ly, t.x, 2.35, t.z - 1.25, 2.5, 0.08, 0.08, '#3E8EDE');
     box(ly, t.x, 1.1, t.z + 1.2, 2.5, 0.1, 0.1, '#3E8EDE'); box(ly, t.x, 2.2, t.z + 1.2, 2.5, 0.1, 0.1, '#3E8EDE');
     for (var i = 0; i < 5; i++) box(ly, t.x - 1.0 + i * 0.5, 0.9 + i * 0.1, t.z - 1.45, 0.45, 0.08, 0.08, '#E8E8E8');
     box(ly, t.x - 1.0, 0.9, t.z - 1.45, 0.08, 1.8, 0.08, '#3E8EDE'); box(ly, t.x + 1.0, 0.9, t.z - 1.45, 0.08, 1.8, 0.08, '#3E8EDE');
     var sl = new THREE.Matrix4().makeRotationZ(-0.62); sl.setPosition(t.x + 3.0, 1.0, t.z);
     box(ly, 0, 0, 0, 3.6, 0.14, 0.9, '#7FDBFF', 0, sl);
     box(ly, 0, 0.18, 0.5, 3.6, 0.2, 0.1, '#3E8EDE', 0, sl); box(ly, 0, 0.18, -0.5, 3.6, 0.2, 0.1, '#3E8EDE', 0, sl);
-    // swing set frame (swings themselves animate)
-    var sw = P.swings, w2 = sw.w / 2;
-    box(ly, sw.x, 3.0, sw.z, sw.w + 0.4, 0.2, 0.2, '#FF8A33');
-    [[-w2, -0.9], [-w2, 0.9], [w2, -0.9], [w2, 0.9]].forEach(function (c) {
-      var m = new THREE.Matrix4().makeRotationX(c[1] > 0 ? -0.3 : 0.3); m.setPosition(sw.x + c[0], 1.5, sw.z + c[1] * 0.5);
-      box(ly, 0, 0, 0, 0.18, 3.2, 0.18, '#FF8A33', 0, m);
+    // swing sets (frame along X, seats hang from a bar at y=3.0 on 2.45 m chains); three sets, seven swings
+    var swingMat = new THREE.Group(); swingMat.position.set(0, 0, 0); L.swingList = [];
+    P.swingSets.forEach(function (sw, wi) {
+      var w2 = sw.w / 2;
+      box(ly, sw.x, 3.0, sw.z, sw.w + 0.4, 0.2, 0.2, '#FF8A33');
+      [[-w2, -0.9], [-w2, 0.9], [w2, -0.9], [w2, 0.9]].forEach(function (c) {
+        var m = new THREE.Matrix4().makeRotationX(c[1] > 0 ? -0.3 : 0.3); m.setPosition(sw.x + c[0], 1.5, sw.z + c[1] * 0.5);
+        box(ly, 0, 0, 0, 0.18, 3.2, 0.18, '#FF8A33', 0, m);
+      });
+      sw.seats.forEach(function (dx, si) {
+        var b = new Layer(1000);
+        box(b, -0.25, -2.0, 0, 0.03, 2.0, 0.03, '#444'); box(b, 0.25, -2.0, 0, 0.03, 2.0, 0.03, '#444');
+        box(b, 0, -2.45, 0, 0.7, 0.08, 0.3, ['#E03030', '#3E8EDE', '#4CB86B', '#FFB020'][(si + wi) % 4]);
+        var ms = b.build(matSolid, true, false, null)[0];
+        var pivot = new THREE.Group(); pivot.position.set(sw.x + dx, 3.0, sw.z); pivot.add(ms); ms.matrixAutoUpdate = true;
+        swingMat.add(pivot);
+        var sd = { x: sw.x + dx, z: sw.z, phase: wi * 0.9 + si * 1.3, amp: 0.2, target: 0.2, th: 0, node: pivot, taken: false };
+        L.swingList.push(sd); ctx.dyn.push({ type: 'swing', node: pivot, sd: sd });
+      });
     });
-    var swingMat = new THREE.Group(); swingMat.position.set(sw.x, 3.0, sw.z);
-    [-2.4, 0, 2.4].forEach(function (dx, si) {
-      var b = new Layer(1000);
-      box(b, -0.25, -2.0, 0, 0.03, 2.0, 0.03, '#444'); box(b, 0.25, -2.0, 0, 0.03, 2.0, 0.03, '#444');
-      box(b, 0, -2.45, 0, 0.7, 0.08, 0.3, ['#E03030', '#3E8EDE', '#4CB86B'][si]);
-      var ms = b.build(matSolid, true, false, null)[0];
-      var pivot = new THREE.Group(); pivot.position.set(dx, 0, 0); pivot.add(ms); ms.matrixAutoUpdate = true;
-      swingMat.add(pivot); ctx.dyn.push({ type: 'swing', node: pivot, phase: si * 1.3 });
-    });
-    ctx.groups.swings = swingMat; ctx.swingGroup = swingMat;
+    ctx.groups.swings = swingMat; ctx.swingGroup = swingMat; ctx.extra.push(swingMat);
     // climbing dome (half sphere of bars)
     var d = P.dome;
     for (i = 0; i < 6; i++) {
@@ -795,7 +800,7 @@
   W.update = function (dt, camera, player) {
     swingT += dt;
     var ctx = W.ctx;
-    ctx.dyn.forEach(function (d) { if (d.type === 'swing') d.node.rotation.x = Math.sin(swingT * 1.6 + d.phase) * 0.45; });
+    ctx.dyn.forEach(function (d) { if (d.type === 'swing') { var sd = d.sd; sd.amp += (sd.target - sd.amp) * Math.min(1, dt * 0.8); sd.th = Math.sin(swingT * 1.9 + sd.phase) * sd.amp; d.node.rotation.x = sd.th; } });
     if (ctx_clouds) ctx_clouds.position.x = (swingT * 1.5) % 400;
     if (W.sky) W.sky.position.copy(camera.position);
     movingCars.forEach(function (c) {

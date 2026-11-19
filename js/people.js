@@ -13,11 +13,13 @@
   if (!window.THREE) return;     // engine failed to load: main.js shows a message
   var S = window.CAMPUS, L = S.layout, nav = S.nav, THREE = window.THREE;
   var P = S.people = {};
+  var CFG = S.config = S.config || {}; if (!CFG.studentsPerClass) CFG.studentsPerClass = 8;
+  var B = null;                 // behaviour module (behavior.js), resolved in P.init
   var U = S.world.util, C = U.C;
 
   // ===================================================== the pretend schedule
   // Game time is in minutes after midnight.
-  var T = { ARRIVE: 450, MORNING: 480, LUNCH: 660, AFTERNOON: 750, DISMISS: 885, END: 930, RESET: 935, MORNING_RESTART: 435 };
+  var T = { ARRIVE: 450, MORNING: 480, LUNCH: 660, AFTERNOON: 815, DISMISS: 885, END: 930, RESET: 935, MORNING_RESTART: 435 };
   P.T = T;
   var clock = P.clock = { t: 7 * 60 + 38, fast: false, minPerSec: 0.3, now: 0 };   // a school day is about 28 real minutes
   P.blockName = function (t) {
@@ -30,12 +32,17 @@
     if (t < T.END) return 'Dismissal';
     return 'After School';
   };
-  // per grade-group schedule: [start minute, activity] (PK-1 / 2-3 / 4-5)
-  var SCHED = [
-    [[480, 'class'], [540, 'specials'], [585, 'class'], [660, 'lunch'], [690, 'recess'], [720, 'class']],
-    [[480, 'class'], [600, 'specials'], [645, 'class'], [690, 'lunch'], [720, 'recess'], [750, 'class']],
-    [[480, 'class'], [720, 'lunch'], [750, 'recess'], [780, 'class'], [810, 'specials'], [855, 'class']]
-  ];
+  // Every class has its own timetable: [start minute, activity].  Five lunch waves of 25 min (a wave is a run of 4-6 classrooms in
+  // building order) each followed by 30 min of recess; one 40 min specials period per class, the room taken from the classroom
+  // number and the slot from the wave so that no two classes ever share a specials room.
+  var WAVES = [6, 6, 6, 5, 4], LUNCH0 = 660, LUNCH_LEN = 25, RECESS_LEN = 30, SPECIAL_SLOTS = [520, 560, 600, 640, 680], SPECIAL_LEN = 40;
+  function waveOf(ci) { var w = 0, left = ci; while (w < WAVES.length - 1 && left >= WAVES[w]) { left -= WAVES[w]; w++; } return w; }
+  P.waveOf = waveOf;
+  function classSchedule(ci) {
+    var sp = SPECIAL_SLOTS[Math.min(SPECIAL_SLOTS.length - 1, Math.floor(ci / 6))], lu = LUNCH0 + waveOf(ci) * LUNCH_LEN;
+    return [[480, 'class'], [sp, 'specials'], [sp + SPECIAL_LEN, 'class'], [lu, 'lunch'], [lu + LUNCH_LEN, 'recess'], [lu + LUNCH_LEN + RECESS_LEN, 'class']];
+  }
+  var SCHED = []; for (var sci = 0; sci < 27; sci++) SCHED.push(classSchedule(sci));
   P.activity = function (group, t) {
     t = t === undefined ? clock.t : t;
     if (t < T.ARRIVE) return 'hidden';
@@ -78,7 +85,9 @@
     var n = {
       id: npcs.length + 1, kind: kind, name: name, role: role, x: 0, y: 0, z: 0, level: 0, yo: 0, h: rnd() * 6.28, hidden: true,
       path: null, pi: 0, node: -1, wait: 0, moving: false, sit: 0, sitTarget: false, phase: rnd() * 10, speed: 1.4,
-      amp: 0, act: '', ctx: '', dest: null, home: null, wanderAt: 0, stuck: 0, lastD: 0, leaving: false, talkUntil: 0
+      amp: 0, act: '', ctx: '', dest: null, home: null, wanderAt: 0, stuck: 0, lastD: 0, leaving: false, talkUntil: 0,
+      // pose (behavior.js): head yaw/pitch, absolute arm angle + blend per arm, arm splay, leg offsets, lean, hop offset, sideways sway, carried prop (1 = tray)
+      hy: 0, hp: 0, aL: 0, aR: 0, wL: 0, wR: 0, zL: 0, zR: 0, lL: 0, lR: 0, ln: 0, jy: 0, sx: 0, prop: 0, scr: null, spdF: 1
     };
     var adult = kind === 'staff';
     n.s = adult ? 1.62 + rnd() * 0.18 : 1.12 + rnd() * 0.16;
@@ -95,9 +104,9 @@
     var gi = 0, order = {};
     // 27 classes x 8 students
     L.classes.forEach(function (cl, ci) {
-      cl.index = ci; cl.group = L.groupOfGrade[cl.grade]; cl.students = [];
-      for (var k = 0; k < 8; k++) {
-        var idx = ci * 8 + k, nm = FIRST[idx % FIRST.length] + ' ' + 'ABCDEFGHJKLMNPRSTW'.charAt((Math.floor(idx / FIRST.length) * 5 + idx * 7) % 18) + '.';
+      cl.index = ci; cl.group = ci; cl.wave = waveOf(ci); cl.students = [];
+      for (var k = 0; k < CFG.studentsPerClass; k++) {
+        var idx = ci * CFG.studentsPerClass + k, nm = FIRST[idx % FIRST.length] + ' ' + 'ABCDEFGHJKLMNPRSTW'.charAt((Math.floor(idx / FIRST.length) * 5 + idx * 7) % 18) + '.';
         var n = makeNPC('student', nm, 'Student');
         n.cls = cl; n.seatIdx = k; n.group = cl.group; n.grade = cl.grade; n.home = cl.room;
         n.busRider = (idx % 3 !== 0); n.busIdx = (ci + k) % 2;
@@ -110,8 +119,8 @@
       var title = titleMr === undefined ? (rnd() < 0.5 ? 'Mr.' : 'Ms.') : titleMr, nm = title + ' ' + SURNAMES[si++ % SURNAMES.length];
       var n = makeNPC('staff', nm, role); for (var k in extra) n[k] = extra[k]; return n;
     }
-    L.classes.forEach(function (cl) {
-      cl.teacher = staff('Teacher', undefined, { cls: cl, group: cl.group, grade: cl.grade, home: cl.room, stroll: ['stroll:' + cl.id], sup: cl.sec === 'A' });
+    L.classes.forEach(function (cl, ci) {
+      cl.teacher = staff('Teacher', undefined, { cls: cl, group: cl.group, grade: cl.grade, home: cl.room, stroll: ['stroll:' + cl.id], sup: ci % 2 === 0 });
     });
     staff('PE Coach', 'Coach', { stroll: ['stroll:gym'], coachNo: 0, group: -1 });
     staff('PE Coach', 'Coach', { stroll: ['stroll:gym'], coachNo: 1, group: -1 });
@@ -163,6 +172,10 @@
       scene.add(m); parts[key] = m; return m;
     }
     mk('body', defs.body, N); mk('head', defs.head, N); mk('hair', defs.hair, N); mk('eyes', defs.eyes, N * 2, C('#1F2530'));
+    defs.tray = geoOf(function (l) { U.box(l, 0, 0, 0, 0.36, 0.025, 0.27, W1); U.box(l, 0, 0.02, -0.12, 0.36, 0.03, 0.025, W1); U.box(l, 0, 0.02, 0.12, 0.36, 0.03, 0.025, W1); });
+    defs.ball = geoOf(function (l) { U.sph(l, 0, 0, 0, 0.12, 0.12, 0.12, W1, null, 8); });
+    mk('tray', defs.tray, N, C('#E8504A')); mk('ball', defs.ball, BALLS, C('#FF8A33'));
+    for (var bi = 0; bi < BALLS; bi++) wz0(parts.ball.instanceMatrix.array, bi * 16);
     mk('armL', defs.arm, N); mk('armR', defs.arm, N); mk('legL', defs.leg, N); mk('legR', defs.leg, N); mk('pack', defs.pack, N);
     npcs.forEach(function (n, i) {
       parts.body.setColorAt(i, C(n.shirt)); parts.head.setColorAt(i, C(n.skin)); parts.hair.setColorAt(i, C(n.hairColor));
@@ -187,39 +200,72 @@
   var HAIR_STYLE = [ // offset y,z and scale x,y,z of the hair blob relative to the head centre
     [0.05, -0.045, 1.0, 1.0, 1.0], [0.0, -0.07, 1.02, 1.38, 1.0], [0.06, -0.035, 1.14, 1.14, 1.12], null];
   var PART_KEYS = ['body', 'head', 'hair', 'armL', 'armR', 'legL', 'legR', 'pack'];
-  var ALL_KEYS = PART_KEYS.concat(['eyes']);
-  var R = { bx: 0, by: 0, bz: 0, s: 1, ch: 1, sh: 0, hs: 0, hc: 1 };    // per-character transform shared by put()
-  // write one body part: local offset (lx,ly,lz), rotation about X, scale
-  function put(mesh, idx, lx, ly, lz, rx, sx, sy, sz) {
-    var cx = Math.sin(rx * 0.5), cw = Math.cos(rx * 0.5), s = R.s;
+  var ALL_KEYS = PART_KEYS.concat(['eyes', 'tray', 'ball']);
+  var R = { bx: 0, by: 0, bz: 0, s: 1, ch: 1, sh: 0, hs: 0, hc: 1, ln: 0, h: 0, ox: 0, oy: 0, oz: 0 };    // per-character transform shared by put()
+  // write one body part: local offset (lx,ly,lz), rotation about X (rx), about Z (rz, arm splay), extra yaw (ey, head turn),
+  // scale.  R.ln leans everything that is put while it is set (about the hips).  Quaternion = Ry(h+ey) * Rz(rz) * Rx(rx).
+  function put(mesh, idx, lx, ly, lz, rx, sx, sy, sz, rz, ey) {
+    var s = R.s, ln = R.ln;
+    if (ln !== 0) {
+      var dy = ly - 0.4, cl = Math.cos(ln), sl = Math.sin(ln), ny = 0.4 + dy * cl - lz * sl; lz = dy * sl + lz * cl; ly = ny; rx += ln;
+    }
+    var cx = Math.sin(rx * 0.5), cw = Math.cos(rx * 0.5), qx, qy, qz, qw;
+    if (!rz && !ey) { qx = R.hc * cx; qy = R.hs * cw; qz = -R.hs * cx; qw = R.hc * cw; }
+    else {
+      var a = rz ? Math.sin(rz * 0.5) : 0, b = rz ? Math.cos(rz * 0.5) : 1;
+      var px = b * cx, py = a * cx, pz = a * cw, pw = b * cw, u = R.hs, v = R.hc;
+      if (ey) { var hh = (R.h + ey) * 0.5; u = Math.sin(hh); v = Math.cos(hh); }
+      qx = v * px + u * pz; qy = v * py + u * pw; qz = v * pz - u * px; qw = v * pw - u * py;
+    }
     wm(mesh.instanceMatrix.array, idx * 16, R.bx + s * (lx * R.ch + lz * R.sh), R.by + s * ly, R.bz + s * (-lx * R.sh + lz * R.ch),
-      R.hc * cx, R.hs * cw, -R.hs * cx, R.hc * cw, sx * s, sy * s, sz * s);
+      qx, qy, qz, qw, sx * s, sy * s, sz * s);
   }
+  // offset (ox,oy,oz) of a point on the head, turned by yaw ey and nodded by pitch ep about the head centre (0, 0.84, 0)
+  function headPt(ox, oy, oz, ey, ep) {
+    var ce = Math.cos(ey), se = Math.sin(ey), x = ox * ce + oz * se, z = -ox * se + oz * ce;
+    var cp = Math.cos(ep), sp = Math.sin(ep), y = oy * cp - z * sp; z = oy * sp + z * cp;
+    R.ox = x; R.oy = 0.84 + y; R.oz = z;
+  }
+  var TRAY_Y = 0.79;
   function renderNPC(i, n, near, camT) {
     var k;
     if (n.hidden || n.cull) {
       for (k = 0; k < PART_KEYS.length; k++) wz0(parts[PART_KEYS[k]].instanceMatrix.array, i * 16);
-      wz0(parts.eyes.instanceMatrix.array, i * 32); wz0(parts.eyes.instanceMatrix.array, i * 32 + 16); return;
+      wz0(parts.eyes.instanceMatrix.array, i * 32); wz0(parts.eyes.instanceMatrix.array, i * 32 + 16); wz0(parts.tray.instanceMatrix.array, i * 16); return;
     }
     var s = n.s, h = n.h, legA = 0, bob = 0, sit = n.sit, wid = n.width;
     if (near) {
       if (n.moving) { legA = Math.sin(n.phase) * 0.75 * n.amp; bob = Math.abs(Math.sin(n.phase)) * 0.035 * n.amp; }
       else bob = Math.sin(camT * 2.2 + n.id) * 0.006;
     }
-    var legSit = -1.5 * sit, armSit = -0.55 * sit;
-    R.s = s; R.sh = Math.sin(h); R.ch = Math.cos(h); R.hs = Math.sin(h * 0.5); R.hc = Math.cos(h * 0.5);
-    R.bx = n.x; R.by = n.y + bob * s; R.bz = n.z;
+    var legSit = -1.5 * sit, armSit = -0.55 * sit, baseL = legA * 0.9 + armSit, baseR = -legA * 0.9 + armSit;
+    var angL = baseL + (n.aL - baseL) * n.wL, angR = baseR + (n.aR - baseR) * n.wR;
+    R.s = s; R.h = h; R.sh = Math.sin(h); R.ch = Math.cos(h); R.hs = Math.sin(h * 0.5); R.hc = Math.cos(h * 0.5);
+    R.bx = n.x + n.sx * R.ch * s; R.by = n.y + (bob + n.jy) * s; R.bz = n.z - n.sx * R.sh * s;
+    R.ln = n.ln;
     put(parts.body, i, 0, 0.53, 0, 0, wid, 1, wid);
-    put(parts.head, i, 0, 0.84, 0, 0, 1, 1, 1);
+    var hy = n.hy, hp = n.hp;
+    if (hy === 0 && hp === 0) put(parts.head, i, 0, 0.84, 0, 0, 1, 1, 1); else put(parts.head, i, 0, 0.84, 0, hp, 1, 1, 1, 0, hy);
     var hsty = HAIR_STYLE[n.hairStyle];
-    if (hsty) put(parts.hair, i, 0, 0.84 + hsty[0], hsty[1], 0, hsty[2], hsty[3], hsty[4]); else wz0(parts.hair.instanceMatrix.array, i * 16);
-    put(parts.armL, i, 0.17 * wid + 0.02, 0.67, 0, legA * 0.9 + armSit, 1, 1, 1);
-    put(parts.armR, i, -0.17 * wid - 0.02, 0.67, 0, -legA * 0.9 + armSit, 1, 1, 1);
-    put(parts.legL, i, 0.065, 0.37, 0, -legA + legSit, 1, 1, 1);
-    put(parts.legR, i, -0.065, 0.37, 0, legA + legSit, 1, 1, 1);
+    if (hsty) { headPt(0, hsty[0], hsty[1], hy, hp); put(parts.hair, i, R.ox, R.oy, R.oz, hp, hsty[2], hsty[3], hsty[4], 0, hy); } else wz0(parts.hair.instanceMatrix.array, i * 16);
+    put(parts.armL, i, 0.17 * wid + 0.02, 0.67, 0, angL, 1, 1, 1, n.zL, 0);
+    put(parts.armR, i, -0.17 * wid - 0.02, 0.67, 0, angR, 1, 1, 1, n.zR, 0);
     if (n.kind === 'student' || n.id === 0) put(parts.pack, i, 0, 0.55, -0.145, 0, 1, 1, 1); else wz0(parts.pack.instanceMatrix.array, i * 16);
-    put(parts.eyes, i * 2, 0.06, 0.855, 0.145, 0, 1, 1, 1); put(parts.eyes, i * 2 + 1, -0.06, 0.855, 0.145, 0, 1, 1, 1);
+    headPt(0.06, 0.015, 0.145, hy, hp); put(parts.eyes, i * 2, R.ox, R.oy, R.oz, hp, 1, 1, 1, 0, hy);
+    headPt(-0.06, 0.015, 0.145, hy, hp); put(parts.eyes, i * 2 + 1, R.ox, R.oy, R.oz, hp, 1, 1, 1, 0, hy);
+    R.ln = 0;
+    put(parts.legL, i, 0.065, 0.37, 0, -legA + legSit + n.lL, 1, 1, 1);
+    put(parts.legR, i, -0.065, 0.37, 0, legA + legSit + n.lR, 1, 1, 1);
+    if (n.prop === 1) {                         // lunch tray: carried in front of the body, or on the table once seated
+      var seated = sit > 0.5, fz = seated ? 0.84 : 0.36 * s + 0.1, ty = seated ? n.y + TRAY_Y : n.y + (0.60 + bob + n.jy) * s;      // seated: ~0.28 m in from the table centre, resting on the top
+      wm(parts.tray.instanceMatrix.array, i * 16, n.x + R.sh * fz, ty, n.z + R.ch * fz, 0, R.hs, 0, R.hc, 1, 1, 1);
+    } else wz0(parts.tray.instanceMatrix.array, i * 16);
   }
+  // balls (props shared by games and PE): written by behavior.js
+  var BALLS = 28;
+  P.BALLS = BALLS;
+  P.setBall = function (k, x, y, z) { wm(parts.ball.instanceMatrix.array, k * 16, x, y, z, 0, 0, 0, 1, 1, 1, 1); };
+  P.hideBall = function (k) { wz0(parts.ball.instanceMatrix.array, k * 16); };
 
   // ============================================================ the player
   // The player is one extra instance in the same buffers.
@@ -231,13 +277,13 @@
   };
 
   // ===================================================== routing / planning
-  var STUDENT_SPD = 4.0, STAFF_SPD = 2.8, RECESS_RUSH = 1.3;
+  var STUDENT_SPD = 4.4, STAFF_SPD = 2.8, RECESS_RUSH = 1.3;
   var occ = [];                 // how many characters target each spot (recess spots spread out)
   var cand = [];
   // random spot of a list; for recess lists prefer the least occupied ones
   function pickSpot(key) {
     var l = nav.spots[key]; if (!l || !l.length) return null;
-    if (key.indexOf('rec:') !== 0) return l[Math.floor(rnd() * l.length)];
+    if (key.indexOf('rec:') !== 0 && key.indexOf('post:') !== 0 && key.indexOf('stroll:') !== 0) return l[Math.floor(rnd() * l.length)];      // (recess spots, posts and staff stroll spots spread out)
     var min = 1e9, i;
     for (i = 0; i < l.length; i++) { var o = occ[l[i].i] || 0; if (o < min) min = o; }
     cand.length = 0;
@@ -271,8 +317,8 @@
     if (n.jx || n.jz) { var r = L.resolve(n.x, n.z, 0.26, true, n.level); n.x = r.x; n.z = r.z; unstack(n); }
     n.node = spot.i; n.path = null; n.moving = false;
   }
-  function goTo(n, spot, wait) {
-    if (n.dest === spot && !n.path) return;
+  function goTo(n, spot, wait, force) {
+    if (!force && n.dest === spot && !n.path) return;       // (force: walk there even though the spot is the recorded destination, e.g. after a scripted game moved the child)
     var from = n.path ? n.path[Math.min(n.pi, n.path.length - 1)] : n.node;
     var route = from >= 0 ? nav.route(from, spot.i) : null;
     if (!route) { placeAt(n, spot); return; }
@@ -284,6 +330,8 @@
   function routeLen(a, b) {
     var key = a * 4096 + b, v = lenCache[key];
     if (v !== undefined) return v;
+    if (routeBudget <= 0) return Math.hypot(nav.nodes[a].x - nav.nodes[b].x, nav.nodes[a].z - nav.nodes[b].z);     // straight line until there is time for the real route
+    routeBudget--;
     var r = nav.route(a, b), len = 0;
     if (r) for (var i = 1; i < r.length; i++) len += Math.hypot(nav.nodes[r[i]].x - nav.nodes[r[i - 1]].x, nav.nodes[r[i]].z - nav.nodes[r[i - 1]].z);
     return (lenCache[key] = len);
@@ -293,21 +341,19 @@
   function studentDest(n, act) {
     var cl = n.cls, nm = nav.spots;
     if (act === 'class' || act === 'arrive') return nm['seat:' + cl.id][n.seatIdx];
-    if (act === 'specials') { var list = nav.spots['special:' + L.specialRooms[cl.index % 6]]; return list[n.specialSlot % list.length]; }
+    if (act === 'specials') { n.spRoom = L.specialRooms[cl.index % 6]; var list = nav.spots['special:' + n.spRoom]; return list[n.specialSlot % list.length]; }
     if (act === 'lunch') { var l = nm.lunch; return l[n.lunchIdx % l.length]; }
     if (act === 'recess') return pickSpot('rec:' + n.recessZone);
     if (act === 'dismiss') return n.busRider ? pickSpot('bus' + n.busIdx) : pickSpot('car');
     return null;
   }
   function assignSlots() {
-    // lunch seats: students of a group sit together in order; special slots per (group, room)
-    var perGroup = [0, 0, 0], spec = {};
+    // lunch seats: a wave sits together in classroom order; the specials seat is simply the child's number
+    var perWave = [0, 0, 0, 0, 0];
     L.classes.forEach(function (cl) {
       cl.students.forEach(function (n) {
-        n.lunchIdx = perGroup[n.group]++;
-        var key = n.group + ':' + (cl.index % 6);
-        spec[key] = (spec[key] || 0); n.specialSlot = spec[key]++;
-        n.recessZone = ['playground', 'field', 'court'][(cl.index + n.group) % 3];
+        n.lunchIdx = perWave[cl.wave]++; n.specialSlot = n.seatIdx;
+        n.recessZone = ['playground', 'field', 'court'][(cl.index + cl.wave) % 3];
       });
     });
   }
@@ -319,16 +365,26 @@
   function tripMinutes(n, dest, act) {
     if (!n.dest || !dest) return 0;
     var spd = STUDENT_SPD * n.speedMul * (act === 'recess' ? RECESS_RUSH : 1);
-    return routeLen(n.dest.i, dest.i) / spd * clock.minPerSec * 1.4 + 1.2 + n.jit;
+    if (act === 'lunch' || act === 'specials') spd *= LINE_SPD;                  // walking in a line behind the teacher
+    // a class walking together strings out into a line, so the last child needs a little longer than a lone walker would
+    return routeLen(n.dest.i, dest.i) / spd * clock.minPerSec * 1.3 + 2.0 + 0.04 * CFG.studentsPerClass + n.jit;
   }
 
   // Students leave early by exactly their own walking time so they arrive when the block starts.
+  // route planning is spread over frames: at most this many new routes per simulation step (a class change would otherwise cost one long frame)
+  var ROUTE_BUDGET = 4, routeBudget = ROUTE_BUDGET;
+  var ARRIVE_SPREAD = 45, DISMISS_SPREAD = 55;      // real seconds over which arrivals / departures are spread
   function planStudent(n, snap) {
+    if (n.pend) {                                          // waiting to get off the bus
+      if (clock.now < n.pend.at || routeBudget <= 0) return;
+      routeBudget--;
+      var pd = n.pend.dest; n.pend = null; n.hidden = false; n.node = -1; n.dest = null; placeAt(n, pickSpot('drop')); goTo(n, pd, 0); return;
+    }
     var t = clock.t, b = BLOCKS[n.group], ci = blockIndex(n.group, t), dest, act;
     if (ci < 0 || b[ci][1] === 'hidden') { n.hidden = true; n.path = null; n.blk = ci; n.act = 'hidden'; n.dest = null; n.node = -1; return; }
     if (snap) {
-      act = b[ci][1]; n.blk = ci; n.act = act; n.lookBlk = -1; dest = studentDest(n, act);
-      n.hidden = false; if (dest) placeAt(n, dest); return;
+      act = b[ci][1]; if (B) B.onAct(n, n.act, act); n.blk = ci; n.act = act; n.lookBlk = -1; dest = studentDest(n, act);
+      n.hidden = false; if (dest) { placeAt(n, dest); if (B) B.afterSnap(n, act, dest); } return;
     }
     var ti = ci, nb = ci + 1;
     if (nb < b.length && b[nb][1] !== 'dismiss' && b[nb][1] !== 'hidden' && n.blk >= 0) {
@@ -340,25 +396,42 @@
       if (n.blk === nb || t >= b[nb][0] - tripMinutes(n, n.nextDest, b[nb][1])) ti = nb;      // once left, stay committed
     }
     if (ti === n.blk) return;
-    act = b[ti][1]; n.blk = ti; n.act = act;
-    dest = (n.lookBlk === ti && n.nextDest) ? n.nextDest : studentDest(n, act);
+    if (routeBudget <= 0) return;                          // try again next step
+    routeBudget--;
+    act = b[ti][1]; if (B) B.onAct(n, n.act, act); n.blk = ti; n.act = act;
+    dest = (n.lookBlk === ti && n.nextDest && act !== 'lunch') ? n.nextDest : (act === 'lunch' && B ? B.lunchDest(n) : studentDest(n, act));
     if (!dest) return;
-    if (act === 'arrive' || n.hidden) {                    // appears at the buses
-      n.hidden = false; n.node = -1; n.dest = null; var d0 = pickSpot('drop'); placeAt(n, d0);
-      goTo(n, dest, rnd() * 8); return;
+    if (act === 'arrive' || n.hidden) {                    // gets off a bus at some moment during the arrival period
+      n.hidden = true; n.node = -1; n.dest = null; n.pend = { dest: dest, at: clock.now + rnd() * ARRIVE_SPREAD }; return;
     }
     n.rushing = (act === 'recess');
     if (dest === n.dest) return;
-    goTo(n, dest, act === 'dismiss' ? rnd() * 10 : 0);
+    goTo(n, dest, act === 'dismiss' ? rnd() * DISMISS_SPREAD : 0);
     n.leaving = (act === 'dismiss');
   }
 
   // staff supervisors / coaches go a little early too
   var STAFF_LEAD = 12, tickRecess = false;
   function staffAct(g, t) { return (t >= T.MORNING && t < T.END) ? (t + STAFF_LEAD < T.DISMISS ? P.activity(g, t + STAFF_LEAD) : 'dismiss') : P.activity(g, t); }
-  function computeTick() { var t = clock.t; tickRecess = staffAct(0, t) === 'recess' || staffAct(1, t) === 'recess' || staffAct(2, t) === 'recess'; }
+  function computeTick() { var t = clock.t; tickRecess = false; for (var g = 0; g < SCHED.length && !tickRecess; g++) tickRecess = staffAct(g, t) === 'recess'; }
 
+  // Teachers walk their class to lunch and to specials: they set off a little before the students, who then string out behind them.
+  var ESCORT_SPD = 1.3, LINE_SPD = 0.8;
+  function escortSpot(n, act) { var el = nav.spots['escort:cafe']; return act === 'lunch' ? el[n.cls.index % el.length] : nav.spots['stroll:' + L.specialRooms[n.cls.index % 6]][0]; }
+  function escortCtx(n, t) {
+    var g = n.group, b = BLOCKS[g], ci = blockIndex(g, t); if (ci < 0 || t < T.MORNING) return null;
+    var cur = b[ci];
+    if ((cur[1] === 'lunch' || cur[1] === 'specials') && t < cur[0] + 4.5) return 'escort:' + cur[1];
+    var nb = ci + 1;
+    if (nb < b.length && (b[nb][1] === 'lunch' || b[nb][1] === 'specials') && n.dest) {
+      var d = escortSpot(n, b[nb][1]);
+      var lead = routeLen(n.dest.i, d.i) / (STAFF_SPD * ESCORT_SPD * n.speedMul) * clock.minPerSec * 1.4 + 2.0;
+      if (t >= b[nb][0] - lead) return 'escort:' + b[nb][1];
+    }
+    return null;
+  }
   function staffDest(n, t) {
+    if (n.ctx && n.ctx.indexOf('escort:') === 0) return escortSpot(n, n.ctx.substring(7));
     if (n.role === 'Teacher') {
       if (n.sup) {
         var act = staffAct(n.group, t);
@@ -377,6 +450,7 @@
   }
   // the "mode" of a staff member; changing it triggers a new destination
   function staffCtx(n, t) {
+    if (n.role === 'Teacher') { var ec = escortCtx(n, t); if (ec) return ec; }
     if (n.role === 'Teacher' && n.sup) { var a = staffAct(n.group, t); return a === 'recess' ? 'recess' : a === 'dismiss' ? 'dismiss' : 'home'; }
     if (n.role === 'PE Coach') return tickRecess ? 'recess' : (t >= T.DISMISS && t < T.END ? 'dismiss' : 'home');
     if (n.roam) return (t >= T.ARRIVE && t < T.MORNING) ? 'arrive' : (t >= T.DISMISS && t < T.END) ? 'dismiss' : 'home';
@@ -389,13 +463,15 @@
     n.ctx = c; n.hidden = false;
     var dest = staffDest(n, t); if (!dest) return;
     if (snap || n.node < 0) { placeAt(n, dest); n.wanderAt = clock.now + 6 + rnd() * 12; return; }
-    goTo(n, dest, rnd() * 4); n.wanderAt = clock.now + 8 + rnd() * 10;
+    var esc = c.indexOf('escort:') === 0; n.spdF = esc ? ESCORT_SPD : 1;
+    goTo(n, dest, esc ? 0 : rnd() * 4); n.wanderAt = clock.now + (esc ? 30 : 8 + rnd() * 10);
   }
   function plan(n, snap) { if (n.kind === 'student') planStudent(n, snap); else planStaff(n, snap); }
 
   // ============================================================ per frame
   function stepNPC(n, dt) {
     if (n.hidden) return;
+    if (n.scr) { B.script(n, dt); return; }
     n.sit += ((n.sitTarget && !n.path ? 1 : 0) - n.sit) * Math.min(1, dt * 8);
     if (n.talkUntil > clock.now) { n.moving = false; return; }
     if (!n.path) {
@@ -403,13 +479,17 @@
       if (n.kind === 'student') {                           // wander between recess spots
         if (n.act === 'recess' && clock.now > n.wanderAt) {
           n.wanderAt = clock.now + 6 + rnd() * 10;
-          var d = pickSpot('rec:' + n.recessZone); if (d && d !== n.dest) goTo(n, d, rnd() * 2);
+          if (!B || !B.recess(n)) { var d = pickSpot('rec:' + n.recessZone); if (d && d !== n.dest) goTo(n, d, rnd() * 2); }
         }
       } else if (clock.now > n.wanderAt) {
         n.wanderAt = clock.now + (n.roam ? 7 : 10) + rnd() * (n.roam ? 12 : 18);
         var key = (n.ctx === 'recess' || n.ctx === 'dismiss' || n.ctx === 'arrive') ? null : n.stroll[Math.floor(rnd() * n.stroll.length)];
         if (n.ctx === 'lunch') key = 'stroll:counter';
-        if (key) { var dd = pickSpot(key); if (dd && dd !== n.dest) goTo(n, dd, 0); }
+        var dd = null;
+        if (B && n.role === 'Teacher') dd = B.teacherNext(n, key);            // pace the front, sometimes an aisle; patrol on yard duty
+        else if (B && n.role === 'PE Coach' && n.ctx === 'recess') dd = B.dutyNext(n);
+        else if (key) dd = pickSpot(key);
+        if (dd && dd !== n.dest) goTo(n, dd, 0);
       }
       if (n.faceTo != null) { var df = Math.atan2(Math.sin(n.faceTo - n.h), Math.cos(n.faceTo - n.h)); n.h += df * Math.min(1, dt * 8); }
       return;
@@ -418,8 +498,15 @@
     n.sitTarget = false; n.sit = Math.max(0, n.sit - dt * 6);
     var node = nav.nodes[n.path[n.pi]], last = n.pi === n.path.length - 1;
     var tx = last ? node.x + n.jx : node.x, tz = last ? node.z + n.jz : node.z;
+    if (node.lane) {                                                    // two lanes on the stair flights: keep to the right of the direction of travel
+      var ldx = 0, ldz = 0;                                              // direction of travel along this stretch (stable: from node to node)
+      if (n.pi > 0) { ldx = node.x - nav.nodes[n.path[n.pi - 1]].x; ldz = node.z - nav.nodes[n.path[n.pi - 1]].z; }
+      else if (n.path.length > 1) { ldx = nav.nodes[n.path[1]].x - node.x; ldz = nav.nodes[n.path[1]].z - node.z; }
+      var ll = Math.hypot(ldx, ldz); if (ll > 0.01) { tx += -ldz / ll * 0.55; tz += ldx / ll * 0.55; }
+    }
     var dx = tx - n.x, dz = tz - n.z, dist = Math.hypot(dx, dz);
-    var spd = (n.kind === 'student' ? STUDENT_SPD : STAFF_SPD) * n.speedMul * (n.rushing && n.act === 'recess' ? RECESS_RUSH : 1);
+    var spd = (n.kind === 'student' ? STUDENT_SPD : STAFF_SPD) * n.speedMul * (n.rushing && n.act === 'recess' ? RECESS_RUSH : 1) * n.spdF;
+    if (B) spd = B.gate(n, spd);
     var step = spd * dt;
     if (dist <= step + 0.02) {
       n.x = tx; n.z = tz; n.node = node.i; n.pi++; n.stuck = 0; n.level = node.level;
@@ -438,7 +525,7 @@
       n.amp += (Math.min(1.2, spd / 4.0) - n.amp) * Math.min(1, dt * 8);
       n.phase += dt * spd * 2.4;
       // stuck watchdog: no progress for 2.5 s -> jump to the node
-      if (Math.abs(dist - n.lastD) < 0.01) { n.stuck += dt; if (n.stuck > 2.5) { n.x = tx; n.z = tz; n.stuck = 0; } } else n.stuck = 0;
+      if (Math.abs(dist - n.lastD) < 0.01 && !n.gated) { n.stuck += dt; if (n.stuck > 2.5) { n.x = tx; n.z = tz; n.stuck = 0; } } else n.stuck = 0;
       n.lastD = dist;
     }
     // height: the walking surface (floor or stair flight; switches level on the stairs) plus
@@ -447,17 +534,36 @@
     L.surface(n); n.y += n.yo;
   }
 
+  // Walking characters push away from anybody closer than 0.6 m.  A uniform grid (1.2 m cells) keeps this cheap with hundreds of
+  // characters; the wall/furniture resolver only runs for the ones that were actually pushed.
+  var GX0 = -150, GZ0 = -90, GW = 280, GH = 170, CELL = 1.2;
+  var gHead = new Int32Array(GW * GH), gNext = new Int32Array(1024);
+  var sepStep = 0;
   function separate(dt) {
-    var k = Math.min(1, dt * 6);
-    for (var i = 0; i < npcs.length; i++) {
-      var a = npcs[i]; if (a.hidden || !a.moving) continue;
-      for (var j = 0; j < npcs.length; j++) {
-        if (i === j) continue; var b = npcs[j]; if (b.hidden || b.sit > 0.5 || b.level !== a.level) continue;
-        var dx = a.x - b.x, dz = a.z - b.z, d2 = dx * dx + dz * dz;
-        if (d2 < 0.36 && d2 > 1e-6) { var d = Math.sqrt(d2), push = (0.6 - d) * 0.5 * k; a.x += dx / d * push; a.z += dz / d * push; }
+    var k = Math.min(1, dt * 6), i, n = npcs.length; sepStep++;
+    if (gNext.length < n) gNext = new Int32Array(n * 2);
+    gHead.fill(-1);
+    for (i = 0; i < n; i++) {
+      var o = npcs[i]; if (o.hidden || o.sit > 0.5) { continue; }
+      var cx = ((o.x - GX0) / CELL) | 0, cz = ((o.z - GZ0) / CELL) | 0; if (cx < 0 || cz < 0 || cx >= GW || cz >= GH) continue;
+      var ci = cx * GH + cz; gNext[i] = gHead[ci]; gHead[ci] = i;
+    }
+    for (i = 0; i < n; i++) {
+      var a = npcs[i]; if (a.hidden) continue;
+      if (!a.moving) {                                    // standing: only the occasional wall check
+        if (a.sit < 0.5 && !a.scr && (i + sepStep) % 8 === 0) { var r0 = L.resolve(a.x, a.z, 0.26, true, a.level); a.x = r0.x; a.z = r0.z; }
+        continue;
       }
-      var r = L.resolve(a.x, a.z, 0.26, true, a.level); a.x = r.x; a.z = r.z;
-      L.surface(a); a.y += a.yo;               // keep the height right after being pushed (stairs)
+      var ax = ((a.x - GX0) / CELL) | 0, az = ((a.z - GZ0) / CELL) | 0; if (ax < 1 || az < 1 || ax >= GW - 1 || az >= GH - 1) continue;
+      var pushed = false;
+      for (var gx = ax - 1; gx <= ax + 1; gx++) for (var gz = az - 1; gz <= az + 1; gz++) {
+        for (var j = gHead[gx * GH + gz]; j >= 0; j = gNext[j]) {
+          if (j === i) continue; var b = npcs[j]; if (b.level !== a.level) continue;
+          var dx = a.x - b.x, dz = a.z - b.z, d2 = dx * dx + dz * dz;
+          if (d2 < 0.36 && d2 > 1e-6) { var d = Math.sqrt(d2), push = (0.6 - d) * 0.5 * k; a.x += dx / d * push; a.z += dz / d * push; pushed = true; }
+        }
+      }
+      if (pushed || ((i + sepStep) % 4 === 0 && !a.scr)) { var r = L.resolve(a.x, a.z, 0.26, true, a.level); a.x = r.x; a.z = r.z; L.surface(a); a.y += a.yo; }       // (everybody gets a wall check every fourth step)   // keep the height right after being pushed (stairs)
     }
   }
 
@@ -564,16 +670,17 @@
     player = makeNPC('player', 'You', 'Player'); player.s = 1.24; player.shirt = L.schoolColor; player.pants = '#2F4B7C'; player.skin = '#E0AC69';
     player.hairColor = '#2B1B10'; player.hairStyle = 0; player.pack = '#FFD23F'; player.hidden = false; player.id = 0;
     makeParts(scene); makeTags(scene);
+    B = S.behavior; if (B) B.init(P.core);
     computeTick();
     P.snapAll(true);
   };
   // Teleport everybody to where they belong right now.  With `initial`, students
   // who would be arriving instead start at the buses so the first minutes look alive.
   P.snapAll = function (initial) {
-    computeTick();
+    computeTick(); if (B) B.reset();
     for (var i = 0; i < npcs.length; i++) {
       var n = npcs[i]; if (n === player) continue;
-      n.act = ''; n.ctx = ''; n.node = -1; n.path = null; n.leaving = false; n.blk = -2; n.lookBlk = -1; n.resv = null;
+      n.act = ''; n.ctx = ''; n.node = -1; n.path = null; n.leaving = false; n.pend = null; n.blk = -2; n.lookBlk = -1; n.resv = null;
       if (n.dest) { occ[n.dest.i] = Math.max(0, (occ[n.dest.i] || 1) - 1); n.dest = null; }
       if (initial && n.kind === 'student' && P.activity(n.group, clock.t) === 'arrive') { n.hidden = true; plan(n, false); } else plan(n, true);
     }
@@ -581,6 +688,7 @@
   P.setTime = function (hours) { clock.t = hours * 60; P.snapAll(); };
 
   var camT = 0;
+  var prof = P.prof = { step: 0, beh: 0, sep: 0 };      // accumulated milliseconds (read by the perf tests)
   // view options set by main.js: hideUpper = the second floor is hidden (player downstairs
   // inside); thirdPerson = hide anyone within 1.5 m of the camera so they do not block the view
   P.view = { hideUpper: false, thirdPerson: false };
@@ -592,17 +700,28 @@
       clock.now += dt; clock.t += dt * clock.minPerSec;
       if (clock.t >= T.RESET) { clock.t = T.MORNING_RESTART; P.snapAll(); }
       computeTick();
+      routeBudget = ROUTE_BUDGET;
+      var q0 = performance.now();
       for (i = 0; i < npcs.length; i++) { var n = npcs[i]; if (n === player) continue; plan(n, false); stepNPC(n, dt); }
+      var q1 = performance.now();
+      if (B) B.update(dt);
+      var q2 = performance.now();
       separate(dt);
+      var q3 = performance.now(); prof.step += q1 - q0; prof.beh += q2 - q1; prof.sep += q3 - q2;
     }
     camT += dt;
     // matrices: limbs only near the camera
     var cx = camera.position.x, cy = camera.position.y, cz = camera.position.z, hideUp = P.view.hideUpper, tp = P.view.thirdPerson;
+    var pl = plevel || 0, t0 = performance.now(), pOnStair = !!L.stairAt(px, pz);
+    if (B) B.beginRender(px, pz, pl, camT);
     for (i = 0; i < npcs.length; i++) {
       var q = npcs[i], ddx = q.x - cx, ddz = q.z - cz, ddy = q.y + 0.8 - cy;
       q.cull = q !== player && ((hideUp && q.level === 1 && !L.stairAt(q.x, q.z)) || (tp && ddx * ddx + ddz * ddz + ddy * ddy < 2.25));
+      // full animation: within ~35 m of the camera and on the player's floor (stair towers count for both); everyone else is position-only
+      if (B && q !== player && !q.hidden) B.pose(q, dt, ddx * ddx + ddz * ddz < 1225 && (q.level === pl || pOnStair || L.stairAt(q.x, q.z)));
       renderNPC(i, q, Math.abs(ddx) + Math.abs(ddz) < 80 || q === player, camT);
     }
+    P.renderMs = performance.now() - t0;
     for (k = 0; k < ALL_KEYS.length; k++) parts[ALL_KEYS[k]].instanceMatrix.needsUpdate = true;
     updateTags(px, pz, plevel || 0);
   };
@@ -611,6 +730,9 @@
   // characters actually drawn on a given level (for tests)
   P.drawnOnLevel = function (lv) { var c = 0; for (var i = 0; i < npcs.length; i++) { var n = npcs[i]; if (!n.hidden && !n.cull && n !== player && n.level === lv) c++; } return c; };
   P.count = function () { return npcs.length - 1; };
+  P.LINE_SPD = LINE_SPD;
   P.parts = function () { return parts; };
+  // internals shared with behavior.js
+  P.core = { npcs: npcs, nav: nav, clock: clock, goTo: goTo, placeAt: placeAt, setDest: setDest, pickSpot: pickSpot, rnd: function () { return rnd(); }, unstack: unstack, STUDENT_SPD: STUDENT_SPD, STAFF_SPD: STAFF_SPD };
   P.player = function () { return player; };
 })();

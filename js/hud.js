@@ -133,13 +133,14 @@
     return cv;
   }
 
+  var dotScale = 8 / Math.max(8, (S.config && S.config.studentsPerClass) || 8) + 0.55;      // 1.55 with 8 per class, ~1.0 with 18 (dots shrink as the crowd grows)
   function drawMap(player, npcs) {
     var cv = el.mapCanvas, w = cv.width, h = cv.height, c = el.ctx, lvl = (player.inside && player.level) ? 1 : 0, key = w + 'x' + h + H.big + lvl;
     if (!mapStatic || mapKey !== key) { mapStatic = drawStatic(w, h, H.big, lvl); mapLabels = H.big ? drawLabels(w, h, lvl) : null; mapKey = key; }
     c.drawImage(mapStatic, 0, 0);
     var me = S.people.player(), ps = getPanels(w, h, H.big, lvl);
     for (var k = 0; k < ps.length; k++) {
-      var p = ps[k], r = Math.max(1.5, (p.zoom ? 1.6 : 1) * w / (H.big ? 420 : 110));
+      var p = ps[k], r = Math.max(1.1, (p.zoom ? 1.3 : 0.72) * w / (H.big ? 420 : 110) * dotScale);   // smaller dots now that there are twice as many people
       for (var i = 0; i < npcs.length; i++) {
         var n = npcs[i]; if (n.hidden || n === me || n.level !== p.level) continue;
         c.fillStyle = n.kind === 'staff' ? '#2D5BD6' : '#F2A60C';

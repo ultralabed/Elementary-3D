@@ -2127,6 +2127,9 @@ window.CAMPUS.site = {
   'use strict';
   var S = window.CAMPUS = window.CAMPUS || {};
   var site = S.site;
+  // students in every one of the 27 classes (desks, seats, schedule capacity all follow this single number)
+  var CONFIG = S.config = S.config || {};
+  if (!CONFIG.studentsPerClass) { var qm = /[?&]spc=(\d+)/.exec(window.location && window.location.search || ''); CONFIG.studentsPerClass = qm ? Math.max(4, Math.min(18, +qm[1])) : 18; }   // ?spc=12 for a smaller school (testing)
   var L = S.layout = {};
 
   // ---------------------------------------------------------------- constants
@@ -2409,20 +2412,23 @@ window.CAMPUS.site = {
   // ------------------------------------------------------------- classrooms
   // Local frame of a band room: d = distance from the door wall into the room,
   // o = offset along Z from the room centre.  Desks face the whiteboard on the
-  // far wall; chairs sit on the door side of each desk.  Aisles run at o=-2,0,2.
+  // far wall; chairs sit on the door side of each desk.
   L.classLayout = function (r) {
     var sgn = r.doorSide === 'E' ? -1 : 1;
     var base = r.doorSide === 'E' ? r.x1 : r.x0;
     function W(d, o) { return { x: base + sgn * d, z: r.cz + o }; }
     var heading = sgn < 0 ? -Math.PI / 2 : Math.PI / 2;      // facing the far wall
-    var rowD = [3.6, 6.2], offs = [-3, -1, 1, 3], aisleO = [-2, 0, 2], chairD = [rowD[0] - 0.85, rowD[1] - 0.85];
-    var desks = [], i, j;
-    for (i = 0; i < 2; i++) for (j = 0; j < 4; j++) {
-      var dp = W(rowD[i], offs[j]), cp = W(chairD[i], offs[j]);
-      desks.push({ x: dp.x, z: dp.z, cx: cp.x, cz: cp.z, ri: i, ci: j, heading: heading, rot: sgn < 0 ? 1 : 0 });
+    // up to 18 desks: three rows of six (three pairs-of-three with a 1.1 m centre aisle); a corridor runs behind every row of chairs
+    var N = Math.min(18, CONFIG.studentsPerClass), colO = [-3.15, -2.05, -0.95, 0.95, 2.05, 3.15], rowD = [2.9, 5.1, 7.3];
+    var chairD = rowD.map(function (d) { return d - 0.85; }), cd = chairD.map(function (d) { return d - 0.6; });
+    var OS = [-3.15, -2.05, -0.95, 0, 0.95, 2.05, 3.15];     // offsets of the corridor hubs
+    var desks = [], i;
+    for (i = 0; i < N; i++) {
+      var ri = Math.floor(i / 6), ci = i % 6, dp = W(rowD[ri], colO[ci]), cp = W(chairD[ri], colO[ci]);
+      desks.push({ x: dp.x, z: dp.z, cx: cp.x, cz: cp.z, ri: ri, ci: ci, heading: heading, rot: sgn < 0 ? 1 : 0 });
     }
-    return { W: W, sgn: sgn, heading: heading, desks: desks, rowD: rowD, chairD: chairD, offs: offs, aisleO: aisleO,
-      door: W(1.1, 0), doorOut: W(-1.2, 0), front: W(8.4, 0), board: W(9.82, 0), teacherDesk: W(8.7, 3.2), rug: W(7.7, -1.2) };
+    return { W: W, sgn: sgn, heading: heading, desks: desks, rowD: rowD, chairD: chairD, cd: cd, colO: colO, OS: OS, n: N,
+      door: W(1.1, 0), doorOut: W(-1.2, 0), front: W(8.4, 0), board: W(9.82, 0), teacherDesk: W(8.7, 3.2), rug: W(8.65, -1.8) };
   };
   L.classLayouts = {};
   L.bandRooms.forEach(function (r) { r.cl = L.classLayouts[r.id] = L.classLayout(r); });
@@ -2431,7 +2437,7 @@ window.CAMPUS.site = {
   var F = L.F = {};
   // cafeteria: long tables along X, benches either side; stage on the south wall
   F.cafeTables = [];
-  [-10.5, -1.5].forEach(function (cx) { [16, 20.2, 24.4, 28.6, 32.8].forEach(function (cz) { F.cafeTables.push({ x: cx, z: cz, len: 6.5 }); }); });
+  [-11, -2.6].forEach(function (cx) { [16, 20.2, 24.4, 28.6, 32.8].forEach(function (cz) { F.cafeTables.push({ x: cx, z: cz, len: 6.5 }); }); });
   F.cafeStage = { x0: -12, x1: -4, z0: 37.5, z1: 39.85, h: 0.6 };
   F.cafeCounter = { x0: 3.0, x1: 3.85, z0: 15, z1: 27 };
   // library
@@ -2525,6 +2531,8 @@ window.CAMPUS.site = {
   L.play = {
     tower: { x: -22, z: -64 },          // slide tower 2.6 x 2.6, slide goes +X
     swings: { x: -4, z: -66, w: 7.2 },  // swing set frame along X
+    // swing sets: frame along X, seats hang from a bar at y=3.0 on 2.45 m chains (the first set has three seats, the two new ones two)
+    swingSets: [{ x: -4, z: -66, w: 7.2, seats: [-2.4, 0, 2.4] }, { x: -14, z: -60, w: 4.6, seats: [-1.2, 1.2] }, { x: -4.5, z: -57.5, w: 4.6, seats: [-1.2, 1.2] }],
     dome: { x: -13, z: -50, r: 2.2 },   // climbing dome
     riders: [{ x: 3, z: -48 }, { x: 5.5, z: -51.5 }, { x: 3, z: -55 }],
     benches: [{ x: -26, z: -41, rot: 0 }, { x: 1, z: -40.5, rot: 0 }, { x: 7.5, z: -62, rot: Math.PI / 2 }]
@@ -2534,6 +2542,10 @@ window.CAMPUS.site = {
   L.addBox(P.tower.x + 1.4, P.tower.z - 0.6, P.tower.x + 4.4, P.tower.z + 0.6, false); // slide run (player only)
   L.addBox(P.swings.x - P.swings.w / 2 - 0.5, P.swings.z - 0.5, P.swings.x - P.swings.w / 2 + 0.5, P.swings.z + 0.5, true);
   L.addBox(P.swings.x + P.swings.w / 2 - 0.5, P.swings.z - 0.5, P.swings.x + P.swings.w / 2 + 0.5, P.swings.z + 0.5, true);
+  P.swingSets.slice(1).forEach(function (w) {              // the two new sets: posts are solid, the swing area is kept clear of the recess spots
+    [-1, 1].forEach(function (e) { L.addBox(w.x + e * w.w / 2 - 0.4, w.z - 0.5, w.x + e * w.w / 2 + 0.4, w.z + 0.5, true); });
+  });
+  P.swingSets.forEach(function (w) { L.addBox(w.x - w.w / 2, w.z - 2.0, w.x + w.w / 2, w.z + 2.0, false, { navBlock: true }); });
   L.addCircle(P.dome.x, P.dome.z, P.dome.r - 0.1, true);
   P.riders.forEach(function (p) { L.addCircle(p.x, p.z, 0.6, false); });
   P.benches.forEach(function (b) {
@@ -2656,13 +2668,33 @@ window.CAMPUS.site = {
   // Push a circle (x,z,r) out of every box / circle / segment.  Returns the
   // module-level result object {x,z} (do not keep a reference).
   var res = { x: 0, z: 0 };
+  // Collider index: boxes / circles bucketed in 6 m cells (each inflated by 1.5 m), so a resolve only looks at its neighbourhood.
+  var GCELL = 6, GX0 = -170, GZ0 = -150, GW = 62, GH = 52, gBox = null, gCirc = null, gWall = null, gKey = -1, gOver = [];
+  function buildGrid() {
+    var n = GW * GH, i, k;
+    gBox = new Array(n); gCirc = new Array(n); gWall = new Array(n);
+    for (i = 0; i < n; i++) { gBox[i] = []; gCirc[i] = []; gWall[i] = []; }
+    function cellRange(x0, z0, x1, z1, fn) {
+      var cx0 = Math.floor((x0 - 1.5 - GX0) / GCELL), cx1 = Math.floor((x1 + 1.5 - GX0) / GCELL), cz0 = Math.floor((z0 - 1.5 - GZ0) / GCELL), cz1 = Math.floor((z1 + 1.5 - GZ0) / GCELL);
+      for (var cx = Math.max(0, cx0); cx <= Math.min(GW - 1, cx1); cx++) for (var cz = Math.max(0, cz0); cz <= Math.min(GH - 1, cz1); cz++) fn(cx * GH + cz);
+    }
+    boxes.forEach(function (b, bi) { cellRange(b.x0, b.z0, b.x1, b.z1, function (c) { gBox[c].push(bi); if (b.h) gWall[c].push(bi); }); });
+    circles.forEach(function (c, ci) { cellRange(c.x - c.r, c.z - c.r, c.x + c.r, c.z + c.r, function (cell) { gCirc[cell].push(ci); }); });
+    gKey = boxes.length * 100000 + circles.length;
+  }
+  var EMPTY = [];
+
   L.resolve = function (x, z, r, npcOnly, level) {
     level = level || 0;
-    var xi = x, zi = z, moved, i, pass;
+    if (gKey !== boxes.length * 100000 + circles.length) buildGrid();
+    var xi = x, zi = z, moved, i, pass, gi;
+    var gcx = Math.floor((x - GX0) / GCELL), gcz = Math.floor((z - GZ0) / GCELL), inGrid = gcx >= 0 && gcz >= 0 && gcx < GW && gcz < GH;
+    var lb = inGrid ? gBox[gcx * GH + gcz] : null, lc = inGrid ? gCirc[gcx * GH + gcz] : null, lw = inGrid ? gWall[gcx * GH + gcz] : null;
+    var nb = lb ? lb.length : boxes.length, nc = lc ? lc.length : circles.length, nw = lw ? lw.length : boxes.length;
     for (pass = 0; pass < 3; pass++) {
       moved = false;
-      for (i = 0; i < boxes.length; i++) {
-        var b = boxes[i];
+      for (gi = 0; gi < nb; gi++) {
+        var b = boxes[lb ? lb[gi] : gi];
         if (b.lv !== level || (npcOnly && !b.npc)) continue;
         if (x < b.x0 - r || x > b.x1 + r || z < b.z0 - r || z > b.z1 + r) continue;
         var cx = x < b.x0 ? b.x0 : (x > b.x1 ? b.x1 : x);
@@ -2677,8 +2709,8 @@ window.CAMPUS.site = {
         }
         moved = true;
       }
-      for (i = 0; i < circles.length; i++) {
-        var c = circles[i];
+      for (gi = 0; gi < nc; gi++) {
+        var c = circles[lc ? lc[gi] : gi];
         if (c.lv !== level || (npcOnly && !c.npc)) continue;
         var ex = x - c.x, ez = z - c.z, rr2 = r + c.r, e2 = ex * ex + ez * ez;
         if (e2 >= rr2 * rr2) continue;
@@ -2707,8 +2739,8 @@ window.CAMPUS.site = {
     // wall is put back on the side the move started from (xi, zi).
     for (pass = 0; pass < 4; pass++) {
       moved = false;
-      for (i = 0; i < boxes.length; i++) {
-        b = boxes[i];
+      for (gi = 0; gi < nw; gi++) {
+        b = boxes[lw ? lw[gi] : gi];
         if (!b.h || b.lv !== level) continue;
         if ((x < b.x0 - r && xi < b.x0 - r) || (x > b.x1 + r && xi > b.x1 + r) || (z < b.z0 - r && zi < b.z0 - r) || (z > b.z1 + r && zi > b.z1 + r)) continue;
         cx = x < b.x0 ? b.x0 : (x > b.x1 ? b.x1 : x); cz = z < b.z0 ? b.z0 : (z > b.z1 ? b.z1 : z);
@@ -3307,33 +3339,38 @@ window.CAMPUS.site = {
     flat(g, z.x0, z.z0, z.x0 + 0.3, z.z1, 0.1, '#8C6B4A'); flat(g, z.x1 - 0.3, z.z0, z.x1, z.z1, 0.1, '#8C6B4A');
     // slide tower: 4 posts, platform, roof, ladder, slide
     var t = P.tower, red = L.schoolColor;
-    [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]].forEach(function (c) { box(ly, t.x + c[0], 1.4, t.z + c[1], 0.2, 2.8, 0.2, '#3E8EDE'); });
+    [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]].forEach(function (c) { box(ly, t.x + c[0], 1.9, t.z + c[1], 0.2, 3.8, 0.2, '#3E8EDE'); });
     box(ly, t.x, 1.7, t.z, 2.7, 0.15, 2.7, '#FFD23F');
-    box(ly, t.x, 2.8, t.z, 3.0, 0.2, 3.0, red);
-    box(ly, t.x, 2.95, t.z, 2.0, 0.2, 2.0, '#FF6B6B');
+    box(ly, t.x, 3.8, t.z, 3.0, 0.2, 3.0, red);
+    box(ly, t.x, 3.95, t.z, 2.0, 0.2, 2.0, '#FF6B6B');
+    box(ly, t.x, 2.35, t.z + 1.25, 2.5, 0.08, 0.08, '#3E8EDE'); box(ly, t.x - 1.25, 2.35, t.z, 0.08, 0.08, 2.5, '#3E8EDE'); box(ly, t.x, 2.35, t.z - 1.25, 2.5, 0.08, 0.08, '#3E8EDE');
     box(ly, t.x, 1.1, t.z + 1.2, 2.5, 0.1, 0.1, '#3E8EDE'); box(ly, t.x, 2.2, t.z + 1.2, 2.5, 0.1, 0.1, '#3E8EDE');
     for (var i = 0; i < 5; i++) box(ly, t.x - 1.0 + i * 0.5, 0.9 + i * 0.1, t.z - 1.45, 0.45, 0.08, 0.08, '#E8E8E8');
     box(ly, t.x - 1.0, 0.9, t.z - 1.45, 0.08, 1.8, 0.08, '#3E8EDE'); box(ly, t.x + 1.0, 0.9, t.z - 1.45, 0.08, 1.8, 0.08, '#3E8EDE');
     var sl = new THREE.Matrix4().makeRotationZ(-0.62); sl.setPosition(t.x + 3.0, 1.0, t.z);
     box(ly, 0, 0, 0, 3.6, 0.14, 0.9, '#7FDBFF', 0, sl);
     box(ly, 0, 0.18, 0.5, 3.6, 0.2, 0.1, '#3E8EDE', 0, sl); box(ly, 0, 0.18, -0.5, 3.6, 0.2, 0.1, '#3E8EDE', 0, sl);
-    // swing set frame (swings themselves animate)
-    var sw = P.swings, w2 = sw.w / 2;
-    box(ly, sw.x, 3.0, sw.z, sw.w + 0.4, 0.2, 0.2, '#FF8A33');
-    [[-w2, -0.9], [-w2, 0.9], [w2, -0.9], [w2, 0.9]].forEach(function (c) {
-      var m = new THREE.Matrix4().makeRotationX(c[1] > 0 ? -0.3 : 0.3); m.setPosition(sw.x + c[0], 1.5, sw.z + c[1] * 0.5);
-      box(ly, 0, 0, 0, 0.18, 3.2, 0.18, '#FF8A33', 0, m);
+    // swing sets (frame along X, seats hang from a bar at y=3.0 on 2.45 m chains); three sets, seven swings
+    var swingMat = new THREE.Group(); swingMat.position.set(0, 0, 0); L.swingList = [];
+    P.swingSets.forEach(function (sw, wi) {
+      var w2 = sw.w / 2;
+      box(ly, sw.x, 3.0, sw.z, sw.w + 0.4, 0.2, 0.2, '#FF8A33');
+      [[-w2, -0.9], [-w2, 0.9], [w2, -0.9], [w2, 0.9]].forEach(function (c) {
+        var m = new THREE.Matrix4().makeRotationX(c[1] > 0 ? -0.3 : 0.3); m.setPosition(sw.x + c[0], 1.5, sw.z + c[1] * 0.5);
+        box(ly, 0, 0, 0, 0.18, 3.2, 0.18, '#FF8A33', 0, m);
+      });
+      sw.seats.forEach(function (dx, si) {
+        var b = new Layer(1000);
+        box(b, -0.25, -2.0, 0, 0.03, 2.0, 0.03, '#444'); box(b, 0.25, -2.0, 0, 0.03, 2.0, 0.03, '#444');
+        box(b, 0, -2.45, 0, 0.7, 0.08, 0.3, ['#E03030', '#3E8EDE', '#4CB86B', '#FFB020'][(si + wi) % 4]);
+        var ms = b.build(matSolid, true, false, null)[0];
+        var pivot = new THREE.Group(); pivot.position.set(sw.x + dx, 3.0, sw.z); pivot.add(ms); ms.matrixAutoUpdate = true;
+        swingMat.add(pivot);
+        var sd = { x: sw.x + dx, z: sw.z, phase: wi * 0.9 + si * 1.3, amp: 0.2, target: 0.2, th: 0, node: pivot, taken: false };
+        L.swingList.push(sd); ctx.dyn.push({ type: 'swing', node: pivot, sd: sd });
+      });
     });
-    var swingMat = new THREE.Group(); swingMat.position.set(sw.x, 3.0, sw.z);
-    [-2.4, 0, 2.4].forEach(function (dx, si) {
-      var b = new Layer(1000);
-      box(b, -0.25, -2.0, 0, 0.03, 2.0, 0.03, '#444'); box(b, 0.25, -2.0, 0, 0.03, 2.0, 0.03, '#444');
-      box(b, 0, -2.45, 0, 0.7, 0.08, 0.3, ['#E03030', '#3E8EDE', '#4CB86B'][si]);
-      var ms = b.build(matSolid, true, false, null)[0];
-      var pivot = new THREE.Group(); pivot.position.set(dx, 0, 0); pivot.add(ms); ms.matrixAutoUpdate = true;
-      swingMat.add(pivot); ctx.dyn.push({ type: 'swing', node: pivot, phase: si * 1.3 });
-    });
-    ctx.groups.swings = swingMat; ctx.swingGroup = swingMat;
+    ctx.groups.swings = swingMat; ctx.swingGroup = swingMat; ctx.extra.push(swingMat);
     // climbing dome (half sphere of bars)
     var d = P.dome;
     for (i = 0; i < 6; i++) {
@@ -3618,7 +3655,7 @@ window.CAMPUS.site = {
   W.update = function (dt, camera, player) {
     swingT += dt;
     var ctx = W.ctx;
-    ctx.dyn.forEach(function (d) { if (d.type === 'swing') d.node.rotation.x = Math.sin(swingT * 1.6 + d.phase) * 0.45; });
+    ctx.dyn.forEach(function (d) { if (d.type === 'swing') { var sd = d.sd; sd.amp += (sd.target - sd.amp) * Math.min(1, dt * 0.8); sd.th = Math.sin(swingT * 1.9 + sd.phase) * sd.amp; d.node.rotation.x = sd.th; } });
     if (ctx_clouds) ctx_clouds.position.x = (swingT * 1.5) % 400;
     if (W.sky) W.sky.position.copy(camera.position);
     movingCars.forEach(function (c) {
@@ -3989,8 +4026,8 @@ window.CAMPUS.site = {
       if (r.desks) {
         // student desks + chairs
         c.desks.forEach(function (d) {
-          addDesk(d.x, d.z, 0, acc); addChair(d.cx, d.cz, c.heading, acc);
-          L.addBox(d.x - 0.4, d.z - 0.5, d.x + 0.4, d.z + 0.5, false, { navBlock: true });
+          addDesk(d.x, d.z, 0, acc, 0.95, 0.9); addChair(d.cx, d.cz, c.heading, acc);
+          L.addBox(d.x - 0.35, d.z - 0.4, d.x + 0.35, d.z + 0.4, false, { navBlock: true });
         });
         // teacher desk + chair
         var td = c.teacherDesk, tc = c.W(9.35, 3.2);
@@ -3998,7 +4035,7 @@ window.CAMPUS.site = {
         L.addBox(td.x - 0.5, td.z - 0.95, td.x + 0.5, td.z + 0.95, false, { navBlock: true });
         if (r.id === 'computer') c.desks.forEach(function (d) { U.piece('solid', function () { box(ly, d.x - 0.1 * c.sgn, 0.9, d.z, 0.06, 0.3, 0.45, '#3A4150'); box(ly, d.x - 0.1 * c.sgn + c.sgn * 0.02, 0.9, d.z, 0.02, 0.24, 0.38, '#7FDBFF'); box(ly, d.x - 0.1 * c.sgn, 0.72, d.z, 0.1, 0.1, 0.2, '#3A4150'); }); });
         // rug
-        var rg = c.rug; disk(g, rg.x, rg.z, 1.4, 0.075, acc, 22); disk(g, rg.x, rg.z, 0.9, 0.08, '#FFFFFF', 18); disk(g, rg.x, rg.z, 0.45, 0.085, acc, 14);
+        var rg = c.rug; disk(g, rg.x, rg.z, 1.15, 0.075, acc, 22); disk(g, rg.x, rg.z, 0.75, 0.08, '#FFFFFF', 18); disk(g, rg.x, rg.z, 0.38, 0.085, acc, 14);
       }
       // shelf along one side wall + cubbies
       var a = c.W(4.5, -4.15), b = c.W(8.2, -4.15);
@@ -4006,8 +4043,9 @@ window.CAMPUS.site = {
       L.addBox(Math.min(a.x, b.x), a.z - 0.2, Math.max(a.x, b.x), a.z + 0.2, false, { navBlock: true });
       var a2 = c.W(3.0, 4.15), b2 = c.W(5.4, 4.15);
       U.piece('solid', function () {
-        boxR(ly, Math.min(a2.x, b2.x), a2.z - 0.2, Math.max(a2.x, b2.x), a2.z + 0.2, 0, 1.0, '#E8D9B8');
-        for (var q = 0; q < 6; q++) { var pp = c.W(3.2 + q * 0.4, 4.15); box(ly, pp.x, 0.55, pp.z - 0.21, 0.3, 0.3, 0.03, ['#FF6B6B', '#4FB0F0', '#FFD23F'][q % 3]); }
+        boxR(ly, Math.min(a2.x, b2.x), a2.z - 0.2, Math.max(a2.x, b2.x), a2.z + 0.2, 0, 1.65, '#E8D9B8');
+        // 18 cubbies: three tiers of six, one for every child
+        for (var q = 0; q < 18; q++) { var pp = c.W(3.2 + (q % 6) * 0.4, 4.15); box(ly, pp.x, 0.45 + Math.floor(q / 6) * 0.5, pp.z - 0.21, 0.3, 0.38, 0.03, ['#FF6B6B', '#4FB0F0', '#FFD23F'][q % 3]); }
       });
       L.addBox(Math.min(a2.x, b2.x), a2.z - 0.2, Math.max(a2.x, b2.x), a2.z + 0.2, false, { navBlock: true });
       plant(ly, c.W(9.2, -4.0).x, c.W(9.2, -4.0).z, 1);
@@ -4097,6 +4135,10 @@ window.CAMPUS.site = {
     var co = F.cafeCounter; boxR(ly, co.x0, co.z0, co.x1, co.z1, 0, 1.0, '#E8E8E8'); boxR(ly, co.x0 - 0.05, co.z0, co.x1 + 0.05, co.z1, 1.0, 1.08, '#8CC8F0');
     box(ly, co.x0 + 0.45, 1.8, (co.z0 + co.z1) / 2, 0.05, 0.9, co.z1 - co.z0 - 0.4, '#FFFFFF', 0);
     for (var z = co.z0 + 0.8; z < co.z1 - 0.5; z += 1.4) { box(ly, co.x0 + 0.4, 1.18, z, 0.5, 0.1, 0.4, '#C9894F'); sph(ly, co.x0 + 0.4, 1.3, z, 0.18, 0.1, 0.18, '#FFB74D', null, 5); }
+    // tray rail along the front of the counter, a stack of trays at the head of the line, floor tape marking the line
+    box(ly, co.x0 - 0.2, 0.88, (co.z0 + co.z1) / 2, 0.22, 0.05, co.z1 - co.z0, '#9AA3AF');
+    [co.z0, co.z1].forEach(function (zz) { box(ly, co.x0 - 0.2, 0.44, zz, 0.06, 0.88, 0.06, '#7A808C'); });
+    for (var tz = 0; tz < 6; tz++) box(ly, co.x0 - 0.2, 0.93 + tz * 0.03, co.z0 + 0.5, 0.4, 0.025, 0.3, '#E8504A');
     L.addBox(co.x0, co.z0, co.x1, co.z1, true);
     U.force = null;
     // trash cans
@@ -4305,6 +4347,7 @@ window.CAMPUS.site = {
     n.link = o.hubs || null; n.maxd = o.maxd || 9; n.k = o.k || 2; n.rec = key.indexOf('rec:') === 0;
     // seated characters sit a little behind the chair centre so their knees clear the desk
     if (n.sit && n.h != null) { n.x -= Math.sin(n.h) * 0.12; n.z -= Math.cos(n.h) * 0.12; }
+    n.key = key;
     (nav.spots[key] = nav.spots[key] || []).push(n);
     return n;
   }
@@ -4362,33 +4405,30 @@ window.CAMPUS.site = {
     LV = 0;
 
     // ------------------------------------------------- band rooms (desks)
+    // Desk rooms: a corridor of hubs runs behind each row of chairs (every chair has a hub straight behind it), the centre aisle
+    // joins the corridors to the door and to the front of the room.  These hubs only link inside their own room (and to the door hub).
     L.bandRooms.forEach(function (r) {
       var c = r.cl, id = r.id; LV = r.level;
       hub(id + ':door', c.door.x, c.door.z);
-      var depths = [c.chairD[0], c.chairD[1], 7.5];
-      depths.forEach(function (d, di) {
-        c.aisleO.forEach(function (o, oi) { var p = c.W(d, o); hub(id + ':a' + di + '_' + oi, p.x, p.z); });
-      });
       if (r.desks) {
-        // student chairs
-        c.desks.forEach(function (d, di) {
-          var oi = d.ci, nb = oi === 0 ? [0] : oi === 1 ? [0, 1] : oi === 2 ? [1, 2] : [2];
-          spot('seat:' + id, d.cx, d.cz, { h: c.heading, sit: true, k: 2,
-            hubs: nb.map(function (q) { return id + ':a' + d.ri + '_' + q; }) });
+        c.cd.forEach(function (d, di) { c.OS.forEach(function (o, k) { var p = c.W(d, o), h = hub(id + ':r' + di + '_' + k, p.x, p.z); h.rm = id; }); });
+        [-1.7, 0, 1.5].forEach(function (o, k) { var p = c.W(8.1, o), h = hub(id + ':f' + k, p.x, p.z); h.rm = id; });
+        c.desks.forEach(function (d) {              // student chairs
+          spot('seat:' + id, d.cx, d.cz, { h: c.heading, sit: true, k: 2, hubs: [id + ':r' + d.ri + '_' + c.OS.indexOf(c.colO[d.ci])] });
         });
-        // standing spots for specials (aisle positions)
-        [0, 1, 2].forEach(function (di) { [0, 1, 2].forEach(function (oi) {
-          var p = c.W(depths[di] + 0.0, c.aisleO[oi] + (oi === 0 ? -0.0 : 0));
-          spot('floor:' + id, p.x, p.z, { h: c.heading, hubs: [id + ':a' + di + '_' + oi] });
+        // standing spots in the corridors (aisle spots for specials and for teachers walking an aisle)
+        [0, 1, 2].forEach(function (di) { [1, 3, 5].forEach(function (k) {
+          var p = c.W(c.cd[di] + 0.0, c.OS[k]);
+          spot('floor:' + id, p.x, p.z, { h: c.heading, hubs: [id + ':r' + di + '_' + k] });
         }); });
       }
       // teacher / staff strolling spots
-      var ts = [c.W(8.5, -2.4), c.W(8.5, 1.4), c.W(7.2, 3.2), c.W(4.1, -0.0)];
+      var ts = [c.W(8.6, -1.4), c.W(8.6, 0.6), c.W(8.1, 1.6)];
       if (!r.desks) ts = [c.W(5.5, -1.5), c.W(7.5, 1.8), c.W(3.5, 2)];
       if (id === 'lounge') ts = [];
       ts.forEach(function (p, q) {
         spot('stroll:' + id, p.x, p.z, { h: q === 0 ? c.heading : null, maxd: 7,
-          hubs: r.desks ? [[id + ':a2_0', id + ':a2_1'], [id + ':a2_1', id + ':a2_2'], [id + ':a2_2'], [id + ':a1_1']][q] : null });
+          hubs: r.desks ? [[id + ':f0', id + ':f1'], [id + ':f1', id + ':f2'], [id + ':f2']][q] : null });
       });
       if (!r.desks) { hub(id + ':mid', c.W(5, 0).x, c.W(5, 0).z); }
     });
@@ -4404,24 +4444,28 @@ window.CAMPUS.site = {
 
     // -------------------------------------------------------- cafeteria
     hub('cafeIn', -6, 13.9);
-    var cx = [-10.5, -6, -1.5], zk = [], kk;
+    var cx = [-11, -6.8, -1.5], zk = [], kk;
     for (kk = 0; kk < 6; kk++) zk.push(13.9 + 4.2 * kk);
     zk.forEach(function (z, ki) {
-      cx.forEach(function (x, xi) { if (!(ki === 0 && xi === 1)) hub('cf' + ki + '_' + xi, x, z); });
-      hub('cfe' + ki, 2.4, z);
+      cx.forEach(function (x, xi) { hub('cf' + ki + '_' + xi, x, z); });
+      hub('cfe' + ki, 2.4, z).strip = true;
     });
-    byName['cf0_1'] = byName['cafeIn'];
     L.F.cafeTables.forEach(function (t, ti) {
       var row = Math.round((t.z - 16) / 4.2), xi = t.x < -6 ? 0 : 2;
       [-1, 1].forEach(function (side) {
-        for (var s = -2; s <= 2; s++) {
-          var kz = side < 0 ? row : row + 1, hubs = [xi, xi === 0 ? 1 : 1].map(function (q, qi) { return 'cf' + kz + '_' + (qi === 0 ? xi : 1); });
+        for (var s6 = 0; s6 < 6; s6++) {
+          var s = (s6 - 2.5) * 1.05 / 1.3, kz = side < 0 ? row : row + 1, hubs = [xi, xi === 0 ? 1 : 1].map(function (q, qi) { return 'cf' + kz + '_' + (qi === 0 ? xi : 1); });
           spot('lunch', t.x + s * 1.3, t.z + side * 1.0, { sit: true, h: side < 0 ? 0 : Math.PI, hubs: hubs, k: 2 });
         }
       });
     });
-    [17.5, 21.5, 25].forEach(function (z) { spot('stroll:counter', 2.3, z, { h: Math.PI / 2, hubs: ['cfe' + (z < 19 ? 1 : z < 23 ? 2 : 3)] }); });
+    spot('stroll:counter', 1.9, 14.6, { h: Math.PI / 2, hubs: ['cfe0'] }); spot('stroll:counter', 1.3, 28.4, { h: Math.PI / 2, hubs: ['cfe3', 'cfe4'] });
+    spot('stroll:counter', 1.9, 35.2, { h: Math.PI / 2, hubs: ['cfe5'] });
+    // serving line: 26 slots along the counter wall (hubs, so people can walk from slot to slot); slot 0 is the head
+    nav.queue = [];
+    for (i = 0; i < 26; i++) { var qh = hub('q' + i, 2.45, 15.9 + 0.7 * i); qh.strip = true; qh.qi = i; nav.queue.push(qh); }
     spot('stroll:cafe', -6, 21, {}); spot('stroll:cafe', -6, 30, {});
+    [[-14.8, 14.2], [-1, 13.6], [-15, 36.2], [-1.5, 36.4], [-9.5, 36.4]].forEach(function (p) { spot('stroll:cafe', p[0], p[1], {}); });
 
     // ----------------------------------------------------------- library
     hub('libIn', 31, 13.8);
@@ -4488,6 +4532,58 @@ window.CAMPUS.site = {
     [[24, -8], [50, -8], [38, -16], [30, 2], [46, 2]].forEach(function (p) { spot('rec:yard', p[0], p[1], { maxd: 20 }); });   // courtyard
     [[-20, -34], [-6, -34], [-34, -34], [14, -34], [27, -34]].forEach(function (p) { spot('rec:yard', p[0], p[1], { maxd: 14 }); });
     [[-48, -46], [-48, -44]].forEach(function (p) { spot('rec:pavilion', p[0], p[1], { maxd: 14 }); });
+    // recess activity stations (see behavior.js).  All coordinates were chosen clear of the equipment.
+    var A = nav.act = { swing: [], bench: [], arenas: [], hoops: [], kicks: [], hops: [], patrol: {} };
+    L.play.swingSets.forEach(function (sw) { sw.seats.forEach(function (dx) { A.swing.push(spot('act:swing', sw.x + dx, sw.z - 1.35, { maxd: 60, h: 0 })); }); });
+    var tw = L.play.tower;
+    A.slideFoot = spot('act:slide', tw.x, tw.z - 2.5, { maxd: 60, h: 0 }); A.slideOut = spot('act:slideout', tw.x + 5.2, tw.z, { maxd: 60, h: Math.PI / 2 });
+    L.play.benches.forEach(function (b, bi) {          // two sitters per bench, turned a little towards each other
+      var fx = Math.sin(b.rot), fz = Math.cos(b.rot), rx = Math.cos(b.rot), rz = -Math.sin(b.rot);   // facing / along-bench directions
+      [-0.5, 0.5].forEach(function (o, k) {
+        var h = b.rot + (k ? -0.85 : 0.85);
+        var sp = spot('act:bench', b.x + rx * o - fx * 0.0, b.z + rz * o, { sit: true, y: 0.12, h: h, maxd: 60 });
+        sp.bench = bi; sp.mate = null; A.bench.push(sp);
+      });
+    });
+    for (i = 0; i < A.bench.length; i += 2) { A.bench[i].mate = A.bench[i + 1]; A.bench[i + 1].mate = A.bench[i]; }
+    // tag arenas (entry spot in the middle; rectangles are roamed freely by the chase script)
+    [{ id: 'playground', x0: -27, z0: -57, x1: -18.5, z1: -45 }, { id: 'field', x0: -108, z0: -28, x1: -96, z1: -16 }, { id: 'court', x0: 30.5, z0: -56, x1: 39.5, z1: -46 }].forEach(function (a) {
+      a.cx = (a.x0 + a.x1) / 2; a.cz = (a.z0 + a.z1) / 2; a.zone = a.id; a.spot = spot('act:tag', a.cx, a.cz, { maxd: 60 }); A.arenas.push(a);
+    });
+    // basketball: four players around each hoop; the ball goes between them
+    L.courtHoops.forEach(function (hp, hi) {
+      var d = hp.dir, g = { hoop: hp, rim: { x: hp.x + d * 0.45, y: 2.9, z: hp.z }, spots: [] };
+      [[4.2, -2.6], [4.2, 2.6], [6.4, 0.0], [2.6, 0.0]].forEach(function (o) { g.spots.push(spot('act:hoop', hp.x + d * o[0], hp.z + o[1], { maxd: 40, h: d > 0 ? -Math.PI / 2 : Math.PI / 2 })); });
+      A.hoops.push(g);
+    });
+    // kickball circles on the field (five players, ball passed around)
+    [[-76, -46], [-100, -50], [-78, -14]].forEach(function (c) {
+      var g = { x: c[0], z: c[1], spots: [] };
+      for (var q = 0; q < 5; q++) { var an = q * 1.2566 + 0.3; g.spots.push(spot('act:kick', c[0] + Math.sin(an) * 3.4, c[1] + Math.cos(an) * 3.4, { maxd: 60, h: an + Math.PI })); }
+      A.kicks.push(g);
+    });
+    // jump rope: the jumper in the middle, two turners either side
+    [{ x: -7, z: -46.5, zone: 'playground' }, { x: -86, z: -30, zone: 'field' }, { x: 35, z: -49, zone: 'court', skip: true }].forEach(function (c) {
+      if (c.skip) return;
+      var g = { zone: c.zone, x: c.x, z: c.z, spots: [spot('act:hop', c.x, c.z, { maxd: 60, h: 0 }), spot('act:hop', c.x - 1.9, c.z, { maxd: 60, h: Math.PI / 2 }), spot('act:hop', c.x + 1.9, c.z, { maxd: 60, h: -Math.PI / 2 })] };
+      A.hops.push(g);
+    });
+    // no plain recess spot within 1.4 m of a game station (keeps the idle kids off the players)
+    var stn = [A.slideFoot, A.slideOut].concat(A.swing, A.bench, A.arenas.map(function (q) { return q.spot; }));
+    A.hoops.forEach(function (g) { stn = stn.concat(g.spots); }); A.kicks.forEach(function (g) { stn = stn.concat(g.spots); }); A.hops.forEach(function (g) { stn = stn.concat(g.spots); });
+    ['rec:playground', 'rec:field', 'rec:court'].forEach(function (k) {
+      nav.spots[k] = nav.spots[k].filter(function (q) { return !stn.some(function (t) { return Math.hypot(t.x - q.x, t.z - q.z) < 1.4; }); });
+    });
+    // dismissal posts along the front lawn (enough for every supervising teacher, coach and the principals) and the places teachers wait in the cafeteria
+    for (i = 0; i < 24; i++) spot('post:front', -6 + (i % 12) * 2.8, i < 12 ? 52.6 : 54.8, { maxd: 14 });
+    for (i = 0; i < 10; i++) {
+      var ez = 24.5 + i * 1.2, kn = Math.max(0, Math.min(4, Math.round((ez - 13.9) / 4.2 - 0.5)));
+      spot('escort:cafe', -6.8, ez, { maxd: 9, hubs: ['cf' + kn + '_1', 'cf' + (kn + 1) + '_1'] });
+    }
+    // teachers on duty walk the edge of their yard
+    A.patrol.playground = [[-27, -43], [7, -44], [7, -68.5], [-27, -68.5]].map(function (p) { return spot('patrol:playground', p[0], p[1], { maxd: 60 }); });
+    A.patrol.field = [[-66, -8], [-66, -66], [-112, -66], [-112, -8]].map(function (p) { return spot('patrol:field', p[0], p[1], { maxd: 60 }); });
+    A.patrol.court = [[24, -44], [46, -44], [46, -58.5], [24, -58.5]].map(function (p) { return spot('patrol:court', p[0], p[1], { maxd: 60 }); });
     // supervisor posts
     spot('post:playground', -10, -42, { maxd: 22 }); spot('post:field', -62, -30, { maxd: 30 }); spot('post:court', 34, -44, { maxd: 14 });
     spot('post:front', 4, 54, { maxd: 14 }); spot('post:front', 14, 54, { maxd: 14 }); spot('post:front', 3, 43, { maxd: 14 });
@@ -4498,6 +4594,12 @@ window.CAMPUS.site = {
     for (i = 0; i < hubs.length; i++) for (j = i + 1; j < hubs.length; j++) {
       var a = hubs[i], b = hubs[j], d = Math.hypot(a.x - b.x, a.z - b.z);
       if (d > 62 || a.level !== b.level) continue;
+      if (a.strip || b.strip) {                           // the serving line and the counter-side hubs are never a through route: they only link sideways to the aisles (and to each other along the line)
+        var sa = a.strip, sb = b.strip, other = sa ? b : a;
+        if (sa && sb) { if (!(a.qi !== undefined && b.qi !== undefined && Math.abs(a.qi - b.qi) === 1)) continue; }
+        else if (!(/^cf\d_2$/.test(other.name) && d <= 7)) continue;
+      }
+      if ((a.rm || b.rm) && a.rm !== b.rm && !(a.rm && b.name === a.rm + ':door') && !(b.rm && a.name === b.rm + ':door')) continue;   // classroom corridor hubs stay in their room
       if (L.segBlocked(a.x, a.z, b.x, b.z, 0.45, 0.25, a.level)) continue;
       link(a, b, d);
     }
@@ -4519,33 +4621,74 @@ window.CAMPUS.site = {
       cand.sort(function (p, q) { return p.d - q.d; });
       cand.slice(0, lf.k || 2).forEach(function (c) { link(lf, c.h, c.d); });
     });
+    // direct links between the slide's foot and its exit (leaves are never stepping stones, but a route may start or end on one)
+    (function () { var a = nav.act.slideFoot, b = nav.act.slideOut; var d = Math.hypot(a.x - b.x, a.z - b.z); a.adj.push({ j: b.i, d: d }); b.adj.push({ j: a.i, d: d }); })();
+    [byName.stWg, byName.stWu, byName.stEg, byName.stEu].forEach(function (h) { if (h) h.lane = true; });      // walkers use two lanes on the flights
     nav.built = true;
   }
 
   // ------------------------------------------------------------ A* routing
-  var cache = {};
-  nav.route = function (a, b) {
-    if (a === b) return [a];
-    var key = a + '>' + b; if (cache[key]) return cache[key].slice();
-    var N = nodes, g = {}, came = {}, closed = {}, heap = [], tx = N[b].x, tz = N[b].z;
+  // Routing.  A* runs between hubs only (typed arrays + a visit stamp, nothing allocated per node); a route between two spots is
+  // assembled from the best of the (at most 2 x 2) hub routes at their ends, so that the hub-to-hub results are shared by everybody
+  // walking the same corridors.  Spots linked straight to other spots (slide foot / exit) fall back to a plain A*.
+  var cache = {}, hubCache = {}, AN = 0, gS = null, cameS = null, seenS = null, closedS = null, stampS = 0, lastCost = 0;
+  function astar(a, b) {
+    var N = nodes, n = N.length, heap = [], tx = N[b].x, tz = N[b].z;
+    if (AN !== n) { AN = n; gS = new Float64Array(n); cameS = new Int32Array(n); seenS = new Int32Array(n); closedS = new Int32Array(n); stampS = 0; }
+    stampS++;
     function push(i, f) { heap.push([f, i]); var c = heap.length - 1; while (c > 0) { var p = (c - 1) >> 1; if (heap[p][0] <= heap[c][0]) break; var t = heap[p]; heap[p] = heap[c]; heap[c] = t; c = p; } }
     function pop() { var top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; var c = 0; for (;;) { var l = 2 * c + 1, r = l + 1, m = c; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === c) break; var t = heap[m]; heap[m] = heap[c]; heap[c] = t; c = m; } } return top; }
-    g[a] = 0; push(a, 0);
+    gS[a] = 0; seenS[a] = stampS; push(a, 0);
     while (heap.length) {
       var cur = pop()[1];
-      if (cur === b) { var path = [b]; while (path[0] !== a) path.unshift(came[path[0]]); cache[key] = path; return path.slice(); }
-      if (closed[cur]) continue; closed[cur] = true;
+      if (cur === b) { var path = [b]; while (path[0] !== a) path.unshift(cameS[path[0]]); lastCost = gS[b]; return path; }
+      if (closedS[cur] === stampS) continue; closedS[cur] = stampS;
       if (N[cur].leaf && cur !== a) continue;       // leaves are never stepping stones
       var adj = N[cur].adj;
       for (var q = 0; q < adj.length; q++) {
-        var e = adj[q], ng = g[cur] + e.d;
-        if (g[e.j] === undefined || ng < g[e.j]) {
-          g[e.j] = ng; came[e.j] = cur;
+        var e = adj[q];
+        if (N[e.j].leaf && e.j !== b) continue;                          // (a leaf is only ever the end of a route)
+        var ng = gS[cur] + e.d;
+        if (seenS[e.j] !== stampS || ng < gS[e.j]) {
+          gS[e.j] = ng; cameS[e.j] = cur; seenS[e.j] = stampS;
           push(e.j, ng + Math.hypot(N[e.j].x - tx, N[e.j].z - tz));
         }
       }
     }
     return null;
+  }
+  function hubRoute(a, b) {
+    var key = a * 4096 + b, r = hubCache[key];
+    if (r === undefined) { var p = astar(a, b); r = hubCache[key] = p ? { path: p, cost: lastCost } : null; }
+    return r;
+  }
+  nav.route = function (a, b) {
+    if (a === b) return [a];
+    var key = a * 4096 + b, c = cache[key]; if (c) return c.slice();
+    var A = nodes[a], Bn = nodes[b], so = A.leaf ? A.adj : null, eo = Bn.leaf ? Bn.adj : null, i, j, direct = false;
+    if (so) for (i = 0; i < so.length; i++) if (nodes[so[i].j].leaf) direct = true;
+    if (eo) for (i = 0; i < eo.length; i++) if (nodes[eo[i].j].leaf) direct = true;
+    var path;
+    if (direct) path = astar(a, b);
+    else {
+      var sl = so ? so.length : 1, el = eo ? eo.length : 1, best = null, bestCost = 1e18, combos = [];
+      for (i = 0; i < sl; i++) for (j = 0; j < el; j++) {
+        var ha0 = so ? so[i].j : a, hb0 = eo ? eo[j].j : b, d0 = (so ? so[i].d : 0) + (eo ? eo[j].d : 0);
+        combos.push([d0 + Math.hypot(nodes[ha0].x - nodes[hb0].x, nodes[ha0].z - nodes[hb0].z), ha0, hb0, d0]);
+      }
+      combos.sort(function (p, q) { return p[0] - q[0]; });
+      for (i = 0; i < combos.length; i++) {              // cheapest lower bound first; stop when no combination can win any more
+        var cb = combos[i]; if (cb[0] >= bestCost) break;
+        var cost, hp;
+        if (cb[1] === cb[2]) { cost = cb[3]; hp = [cb[1]]; }
+        else { var hr = hubRoute(cb[1], cb[2]); if (!hr) continue; cost = cb[3] + hr.cost; hp = hr.path; }
+        if (cost < bestCost) { bestCost = cost; best = hp; }
+      }
+      if (!best) return null;
+      path = best.slice(); if (so) path.unshift(a); if (eo) path.push(b);
+    }
+    if (path) cache[key] = path;
+    return path ? path.slice() : null;
   };
 
   // nearest hub reachable (used when something must start from an arbitrary point)
@@ -4581,11 +4724,13 @@ window.CAMPUS.site = {
   if (!window.THREE) return;     // engine failed to load: main.js shows a message
   var S = window.CAMPUS, L = S.layout, nav = S.nav, THREE = window.THREE;
   var P = S.people = {};
+  var CFG = S.config = S.config || {}; if (!CFG.studentsPerClass) CFG.studentsPerClass = 8;
+  var B = null;                 // behaviour module (behavior.js), resolved in P.init
   var U = S.world.util, C = U.C;
 
   // ===================================================== the pretend schedule
   // Game time is in minutes after midnight.
-  var T = { ARRIVE: 450, MORNING: 480, LUNCH: 660, AFTERNOON: 750, DISMISS: 885, END: 930, RESET: 935, MORNING_RESTART: 435 };
+  var T = { ARRIVE: 450, MORNING: 480, LUNCH: 660, AFTERNOON: 815, DISMISS: 885, END: 930, RESET: 935, MORNING_RESTART: 435 };
   P.T = T;
   var clock = P.clock = { t: 7 * 60 + 38, fast: false, minPerSec: 0.3, now: 0 };   // a school day is about 28 real minutes
   P.blockName = function (t) {
@@ -4598,12 +4743,17 @@ window.CAMPUS.site = {
     if (t < T.END) return 'Dismissal';
     return 'After School';
   };
-  // per grade-group schedule: [start minute, activity] (PK-1 / 2-3 / 4-5)
-  var SCHED = [
-    [[480, 'class'], [540, 'specials'], [585, 'class'], [660, 'lunch'], [690, 'recess'], [720, 'class']],
-    [[480, 'class'], [600, 'specials'], [645, 'class'], [690, 'lunch'], [720, 'recess'], [750, 'class']],
-    [[480, 'class'], [720, 'lunch'], [750, 'recess'], [780, 'class'], [810, 'specials'], [855, 'class']]
-  ];
+  // Every class has its own timetable: [start minute, activity].  Five lunch waves of 25 min (a wave is a run of 4-6 classrooms in
+  // building order) each followed by 30 min of recess; one 40 min specials period per class, the room taken from the classroom
+  // number and the slot from the wave so that no two classes ever share a specials room.
+  var WAVES = [6, 6, 6, 5, 4], LUNCH0 = 660, LUNCH_LEN = 25, RECESS_LEN = 30, SPECIAL_SLOTS = [520, 560, 600, 640, 680], SPECIAL_LEN = 40;
+  function waveOf(ci) { var w = 0, left = ci; while (w < WAVES.length - 1 && left >= WAVES[w]) { left -= WAVES[w]; w++; } return w; }
+  P.waveOf = waveOf;
+  function classSchedule(ci) {
+    var sp = SPECIAL_SLOTS[Math.min(SPECIAL_SLOTS.length - 1, Math.floor(ci / 6))], lu = LUNCH0 + waveOf(ci) * LUNCH_LEN;
+    return [[480, 'class'], [sp, 'specials'], [sp + SPECIAL_LEN, 'class'], [lu, 'lunch'], [lu + LUNCH_LEN, 'recess'], [lu + LUNCH_LEN + RECESS_LEN, 'class']];
+  }
+  var SCHED = []; for (var sci = 0; sci < 27; sci++) SCHED.push(classSchedule(sci));
   P.activity = function (group, t) {
     t = t === undefined ? clock.t : t;
     if (t < T.ARRIVE) return 'hidden';
@@ -4646,7 +4796,9 @@ window.CAMPUS.site = {
     var n = {
       id: npcs.length + 1, kind: kind, name: name, role: role, x: 0, y: 0, z: 0, level: 0, yo: 0, h: rnd() * 6.28, hidden: true,
       path: null, pi: 0, node: -1, wait: 0, moving: false, sit: 0, sitTarget: false, phase: rnd() * 10, speed: 1.4,
-      amp: 0, act: '', ctx: '', dest: null, home: null, wanderAt: 0, stuck: 0, lastD: 0, leaving: false, talkUntil: 0
+      amp: 0, act: '', ctx: '', dest: null, home: null, wanderAt: 0, stuck: 0, lastD: 0, leaving: false, talkUntil: 0,
+      // pose (behavior.js): head yaw/pitch, absolute arm angle + blend per arm, arm splay, leg offsets, lean, hop offset, sideways sway, carried prop (1 = tray)
+      hy: 0, hp: 0, aL: 0, aR: 0, wL: 0, wR: 0, zL: 0, zR: 0, lL: 0, lR: 0, ln: 0, jy: 0, sx: 0, prop: 0, scr: null, spdF: 1
     };
     var adult = kind === 'staff';
     n.s = adult ? 1.62 + rnd() * 0.18 : 1.12 + rnd() * 0.16;
@@ -4663,9 +4815,9 @@ window.CAMPUS.site = {
     var gi = 0, order = {};
     // 27 classes x 8 students
     L.classes.forEach(function (cl, ci) {
-      cl.index = ci; cl.group = L.groupOfGrade[cl.grade]; cl.students = [];
-      for (var k = 0; k < 8; k++) {
-        var idx = ci * 8 + k, nm = FIRST[idx % FIRST.length] + ' ' + 'ABCDEFGHJKLMNPRSTW'.charAt((Math.floor(idx / FIRST.length) * 5 + idx * 7) % 18) + '.';
+      cl.index = ci; cl.group = ci; cl.wave = waveOf(ci); cl.students = [];
+      for (var k = 0; k < CFG.studentsPerClass; k++) {
+        var idx = ci * CFG.studentsPerClass + k, nm = FIRST[idx % FIRST.length] + ' ' + 'ABCDEFGHJKLMNPRSTW'.charAt((Math.floor(idx / FIRST.length) * 5 + idx * 7) % 18) + '.';
         var n = makeNPC('student', nm, 'Student');
         n.cls = cl; n.seatIdx = k; n.group = cl.group; n.grade = cl.grade; n.home = cl.room;
         n.busRider = (idx % 3 !== 0); n.busIdx = (ci + k) % 2;
@@ -4678,8 +4830,8 @@ window.CAMPUS.site = {
       var title = titleMr === undefined ? (rnd() < 0.5 ? 'Mr.' : 'Ms.') : titleMr, nm = title + ' ' + SURNAMES[si++ % SURNAMES.length];
       var n = makeNPC('staff', nm, role); for (var k in extra) n[k] = extra[k]; return n;
     }
-    L.classes.forEach(function (cl) {
-      cl.teacher = staff('Teacher', undefined, { cls: cl, group: cl.group, grade: cl.grade, home: cl.room, stroll: ['stroll:' + cl.id], sup: cl.sec === 'A' });
+    L.classes.forEach(function (cl, ci) {
+      cl.teacher = staff('Teacher', undefined, { cls: cl, group: cl.group, grade: cl.grade, home: cl.room, stroll: ['stroll:' + cl.id], sup: ci % 2 === 0 });
     });
     staff('PE Coach', 'Coach', { stroll: ['stroll:gym'], coachNo: 0, group: -1 });
     staff('PE Coach', 'Coach', { stroll: ['stroll:gym'], coachNo: 1, group: -1 });
@@ -4731,6 +4883,10 @@ window.CAMPUS.site = {
       scene.add(m); parts[key] = m; return m;
     }
     mk('body', defs.body, N); mk('head', defs.head, N); mk('hair', defs.hair, N); mk('eyes', defs.eyes, N * 2, C('#1F2530'));
+    defs.tray = geoOf(function (l) { U.box(l, 0, 0, 0, 0.36, 0.025, 0.27, W1); U.box(l, 0, 0.02, -0.12, 0.36, 0.03, 0.025, W1); U.box(l, 0, 0.02, 0.12, 0.36, 0.03, 0.025, W1); });
+    defs.ball = geoOf(function (l) { U.sph(l, 0, 0, 0, 0.12, 0.12, 0.12, W1, null, 8); });
+    mk('tray', defs.tray, N, C('#E8504A')); mk('ball', defs.ball, BALLS, C('#FF8A33'));
+    for (var bi = 0; bi < BALLS; bi++) wz0(parts.ball.instanceMatrix.array, bi * 16);
     mk('armL', defs.arm, N); mk('armR', defs.arm, N); mk('legL', defs.leg, N); mk('legR', defs.leg, N); mk('pack', defs.pack, N);
     npcs.forEach(function (n, i) {
       parts.body.setColorAt(i, C(n.shirt)); parts.head.setColorAt(i, C(n.skin)); parts.hair.setColorAt(i, C(n.hairColor));
@@ -4755,39 +4911,72 @@ window.CAMPUS.site = {
   var HAIR_STYLE = [ // offset y,z and scale x,y,z of the hair blob relative to the head centre
     [0.05, -0.045, 1.0, 1.0, 1.0], [0.0, -0.07, 1.02, 1.38, 1.0], [0.06, -0.035, 1.14, 1.14, 1.12], null];
   var PART_KEYS = ['body', 'head', 'hair', 'armL', 'armR', 'legL', 'legR', 'pack'];
-  var ALL_KEYS = PART_KEYS.concat(['eyes']);
-  var R = { bx: 0, by: 0, bz: 0, s: 1, ch: 1, sh: 0, hs: 0, hc: 1 };    // per-character transform shared by put()
-  // write one body part: local offset (lx,ly,lz), rotation about X, scale
-  function put(mesh, idx, lx, ly, lz, rx, sx, sy, sz) {
-    var cx = Math.sin(rx * 0.5), cw = Math.cos(rx * 0.5), s = R.s;
+  var ALL_KEYS = PART_KEYS.concat(['eyes', 'tray', 'ball']);
+  var R = { bx: 0, by: 0, bz: 0, s: 1, ch: 1, sh: 0, hs: 0, hc: 1, ln: 0, h: 0, ox: 0, oy: 0, oz: 0 };    // per-character transform shared by put()
+  // write one body part: local offset (lx,ly,lz), rotation about X (rx), about Z (rz, arm splay), extra yaw (ey, head turn),
+  // scale.  R.ln leans everything that is put while it is set (about the hips).  Quaternion = Ry(h+ey) * Rz(rz) * Rx(rx).
+  function put(mesh, idx, lx, ly, lz, rx, sx, sy, sz, rz, ey) {
+    var s = R.s, ln = R.ln;
+    if (ln !== 0) {
+      var dy = ly - 0.4, cl = Math.cos(ln), sl = Math.sin(ln), ny = 0.4 + dy * cl - lz * sl; lz = dy * sl + lz * cl; ly = ny; rx += ln;
+    }
+    var cx = Math.sin(rx * 0.5), cw = Math.cos(rx * 0.5), qx, qy, qz, qw;
+    if (!rz && !ey) { qx = R.hc * cx; qy = R.hs * cw; qz = -R.hs * cx; qw = R.hc * cw; }
+    else {
+      var a = rz ? Math.sin(rz * 0.5) : 0, b = rz ? Math.cos(rz * 0.5) : 1;
+      var px = b * cx, py = a * cx, pz = a * cw, pw = b * cw, u = R.hs, v = R.hc;
+      if (ey) { var hh = (R.h + ey) * 0.5; u = Math.sin(hh); v = Math.cos(hh); }
+      qx = v * px + u * pz; qy = v * py + u * pw; qz = v * pz - u * px; qw = v * pw - u * py;
+    }
     wm(mesh.instanceMatrix.array, idx * 16, R.bx + s * (lx * R.ch + lz * R.sh), R.by + s * ly, R.bz + s * (-lx * R.sh + lz * R.ch),
-      R.hc * cx, R.hs * cw, -R.hs * cx, R.hc * cw, sx * s, sy * s, sz * s);
+      qx, qy, qz, qw, sx * s, sy * s, sz * s);
   }
+  // offset (ox,oy,oz) of a point on the head, turned by yaw ey and nodded by pitch ep about the head centre (0, 0.84, 0)
+  function headPt(ox, oy, oz, ey, ep) {
+    var ce = Math.cos(ey), se = Math.sin(ey), x = ox * ce + oz * se, z = -ox * se + oz * ce;
+    var cp = Math.cos(ep), sp = Math.sin(ep), y = oy * cp - z * sp; z = oy * sp + z * cp;
+    R.ox = x; R.oy = 0.84 + y; R.oz = z;
+  }
+  var TRAY_Y = 0.79;
   function renderNPC(i, n, near, camT) {
     var k;
     if (n.hidden || n.cull) {
       for (k = 0; k < PART_KEYS.length; k++) wz0(parts[PART_KEYS[k]].instanceMatrix.array, i * 16);
-      wz0(parts.eyes.instanceMatrix.array, i * 32); wz0(parts.eyes.instanceMatrix.array, i * 32 + 16); return;
+      wz0(parts.eyes.instanceMatrix.array, i * 32); wz0(parts.eyes.instanceMatrix.array, i * 32 + 16); wz0(parts.tray.instanceMatrix.array, i * 16); return;
     }
     var s = n.s, h = n.h, legA = 0, bob = 0, sit = n.sit, wid = n.width;
     if (near) {
       if (n.moving) { legA = Math.sin(n.phase) * 0.75 * n.amp; bob = Math.abs(Math.sin(n.phase)) * 0.035 * n.amp; }
       else bob = Math.sin(camT * 2.2 + n.id) * 0.006;
     }
-    var legSit = -1.5 * sit, armSit = -0.55 * sit;
-    R.s = s; R.sh = Math.sin(h); R.ch = Math.cos(h); R.hs = Math.sin(h * 0.5); R.hc = Math.cos(h * 0.5);
-    R.bx = n.x; R.by = n.y + bob * s; R.bz = n.z;
+    var legSit = -1.5 * sit, armSit = -0.55 * sit, baseL = legA * 0.9 + armSit, baseR = -legA * 0.9 + armSit;
+    var angL = baseL + (n.aL - baseL) * n.wL, angR = baseR + (n.aR - baseR) * n.wR;
+    R.s = s; R.h = h; R.sh = Math.sin(h); R.ch = Math.cos(h); R.hs = Math.sin(h * 0.5); R.hc = Math.cos(h * 0.5);
+    R.bx = n.x + n.sx * R.ch * s; R.by = n.y + (bob + n.jy) * s; R.bz = n.z - n.sx * R.sh * s;
+    R.ln = n.ln;
     put(parts.body, i, 0, 0.53, 0, 0, wid, 1, wid);
-    put(parts.head, i, 0, 0.84, 0, 0, 1, 1, 1);
+    var hy = n.hy, hp = n.hp;
+    if (hy === 0 && hp === 0) put(parts.head, i, 0, 0.84, 0, 0, 1, 1, 1); else put(parts.head, i, 0, 0.84, 0, hp, 1, 1, 1, 0, hy);
     var hsty = HAIR_STYLE[n.hairStyle];
-    if (hsty) put(parts.hair, i, 0, 0.84 + hsty[0], hsty[1], 0, hsty[2], hsty[3], hsty[4]); else wz0(parts.hair.instanceMatrix.array, i * 16);
-    put(parts.armL, i, 0.17 * wid + 0.02, 0.67, 0, legA * 0.9 + armSit, 1, 1, 1);
-    put(parts.armR, i, -0.17 * wid - 0.02, 0.67, 0, -legA * 0.9 + armSit, 1, 1, 1);
-    put(parts.legL, i, 0.065, 0.37, 0, -legA + legSit, 1, 1, 1);
-    put(parts.legR, i, -0.065, 0.37, 0, legA + legSit, 1, 1, 1);
+    if (hsty) { headPt(0, hsty[0], hsty[1], hy, hp); put(parts.hair, i, R.ox, R.oy, R.oz, hp, hsty[2], hsty[3], hsty[4], 0, hy); } else wz0(parts.hair.instanceMatrix.array, i * 16);
+    put(parts.armL, i, 0.17 * wid + 0.02, 0.67, 0, angL, 1, 1, 1, n.zL, 0);
+    put(parts.armR, i, -0.17 * wid - 0.02, 0.67, 0, angR, 1, 1, 1, n.zR, 0);
     if (n.kind === 'student' || n.id === 0) put(parts.pack, i, 0, 0.55, -0.145, 0, 1, 1, 1); else wz0(parts.pack.instanceMatrix.array, i * 16);
-    put(parts.eyes, i * 2, 0.06, 0.855, 0.145, 0, 1, 1, 1); put(parts.eyes, i * 2 + 1, -0.06, 0.855, 0.145, 0, 1, 1, 1);
+    headPt(0.06, 0.015, 0.145, hy, hp); put(parts.eyes, i * 2, R.ox, R.oy, R.oz, hp, 1, 1, 1, 0, hy);
+    headPt(-0.06, 0.015, 0.145, hy, hp); put(parts.eyes, i * 2 + 1, R.ox, R.oy, R.oz, hp, 1, 1, 1, 0, hy);
+    R.ln = 0;
+    put(parts.legL, i, 0.065, 0.37, 0, -legA + legSit + n.lL, 1, 1, 1);
+    put(parts.legR, i, -0.065, 0.37, 0, legA + legSit + n.lR, 1, 1, 1);
+    if (n.prop === 1) {                         // lunch tray: carried in front of the body, or on the table once seated
+      var seated = sit > 0.5, fz = seated ? 0.84 : 0.36 * s + 0.1, ty = seated ? n.y + TRAY_Y : n.y + (0.60 + bob + n.jy) * s;      // seated: ~0.28 m in from the table centre, resting on the top
+      wm(parts.tray.instanceMatrix.array, i * 16, n.x + R.sh * fz, ty, n.z + R.ch * fz, 0, R.hs, 0, R.hc, 1, 1, 1);
+    } else wz0(parts.tray.instanceMatrix.array, i * 16);
   }
+  // balls (props shared by games and PE): written by behavior.js
+  var BALLS = 28;
+  P.BALLS = BALLS;
+  P.setBall = function (k, x, y, z) { wm(parts.ball.instanceMatrix.array, k * 16, x, y, z, 0, 0, 0, 1, 1, 1, 1); };
+  P.hideBall = function (k) { wz0(parts.ball.instanceMatrix.array, k * 16); };
 
   // ============================================================ the player
   // The player is one extra instance in the same buffers.
@@ -4799,13 +4988,13 @@ window.CAMPUS.site = {
   };
 
   // ===================================================== routing / planning
-  var STUDENT_SPD = 4.0, STAFF_SPD = 2.8, RECESS_RUSH = 1.3;
+  var STUDENT_SPD = 4.4, STAFF_SPD = 2.8, RECESS_RUSH = 1.3;
   var occ = [];                 // how many characters target each spot (recess spots spread out)
   var cand = [];
   // random spot of a list; for recess lists prefer the least occupied ones
   function pickSpot(key) {
     var l = nav.spots[key]; if (!l || !l.length) return null;
-    if (key.indexOf('rec:') !== 0) return l[Math.floor(rnd() * l.length)];
+    if (key.indexOf('rec:') !== 0 && key.indexOf('post:') !== 0 && key.indexOf('stroll:') !== 0) return l[Math.floor(rnd() * l.length)];      // (recess spots, posts and staff stroll spots spread out)
     var min = 1e9, i;
     for (i = 0; i < l.length; i++) { var o = occ[l[i].i] || 0; if (o < min) min = o; }
     cand.length = 0;
@@ -4839,8 +5028,8 @@ window.CAMPUS.site = {
     if (n.jx || n.jz) { var r = L.resolve(n.x, n.z, 0.26, true, n.level); n.x = r.x; n.z = r.z; unstack(n); }
     n.node = spot.i; n.path = null; n.moving = false;
   }
-  function goTo(n, spot, wait) {
-    if (n.dest === spot && !n.path) return;
+  function goTo(n, spot, wait, force) {
+    if (!force && n.dest === spot && !n.path) return;       // (force: walk there even though the spot is the recorded destination, e.g. after a scripted game moved the child)
     var from = n.path ? n.path[Math.min(n.pi, n.path.length - 1)] : n.node;
     var route = from >= 0 ? nav.route(from, spot.i) : null;
     if (!route) { placeAt(n, spot); return; }
@@ -4852,6 +5041,8 @@ window.CAMPUS.site = {
   function routeLen(a, b) {
     var key = a * 4096 + b, v = lenCache[key];
     if (v !== undefined) return v;
+    if (routeBudget <= 0) return Math.hypot(nav.nodes[a].x - nav.nodes[b].x, nav.nodes[a].z - nav.nodes[b].z);     // straight line until there is time for the real route
+    routeBudget--;
     var r = nav.route(a, b), len = 0;
     if (r) for (var i = 1; i < r.length; i++) len += Math.hypot(nav.nodes[r[i]].x - nav.nodes[r[i - 1]].x, nav.nodes[r[i]].z - nav.nodes[r[i - 1]].z);
     return (lenCache[key] = len);
@@ -4861,21 +5052,19 @@ window.CAMPUS.site = {
   function studentDest(n, act) {
     var cl = n.cls, nm = nav.spots;
     if (act === 'class' || act === 'arrive') return nm['seat:' + cl.id][n.seatIdx];
-    if (act === 'specials') { var list = nav.spots['special:' + L.specialRooms[cl.index % 6]]; return list[n.specialSlot % list.length]; }
+    if (act === 'specials') { n.spRoom = L.specialRooms[cl.index % 6]; var list = nav.spots['special:' + n.spRoom]; return list[n.specialSlot % list.length]; }
     if (act === 'lunch') { var l = nm.lunch; return l[n.lunchIdx % l.length]; }
     if (act === 'recess') return pickSpot('rec:' + n.recessZone);
     if (act === 'dismiss') return n.busRider ? pickSpot('bus' + n.busIdx) : pickSpot('car');
     return null;
   }
   function assignSlots() {
-    // lunch seats: students of a group sit together in order; special slots per (group, room)
-    var perGroup = [0, 0, 0], spec = {};
+    // lunch seats: a wave sits together in classroom order; the specials seat is simply the child's number
+    var perWave = [0, 0, 0, 0, 0];
     L.classes.forEach(function (cl) {
       cl.students.forEach(function (n) {
-        n.lunchIdx = perGroup[n.group]++;
-        var key = n.group + ':' + (cl.index % 6);
-        spec[key] = (spec[key] || 0); n.specialSlot = spec[key]++;
-        n.recessZone = ['playground', 'field', 'court'][(cl.index + n.group) % 3];
+        n.lunchIdx = perWave[cl.wave]++; n.specialSlot = n.seatIdx;
+        n.recessZone = ['playground', 'field', 'court'][(cl.index + cl.wave) % 3];
       });
     });
   }
@@ -4887,16 +5076,26 @@ window.CAMPUS.site = {
   function tripMinutes(n, dest, act) {
     if (!n.dest || !dest) return 0;
     var spd = STUDENT_SPD * n.speedMul * (act === 'recess' ? RECESS_RUSH : 1);
-    return routeLen(n.dest.i, dest.i) / spd * clock.minPerSec * 1.4 + 1.2 + n.jit;
+    if (act === 'lunch' || act === 'specials') spd *= LINE_SPD;                  // walking in a line behind the teacher
+    // a class walking together strings out into a line, so the last child needs a little longer than a lone walker would
+    return routeLen(n.dest.i, dest.i) / spd * clock.minPerSec * 1.3 + 2.0 + 0.04 * CFG.studentsPerClass + n.jit;
   }
 
   // Students leave early by exactly their own walking time so they arrive when the block starts.
+  // route planning is spread over frames: at most this many new routes per simulation step (a class change would otherwise cost one long frame)
+  var ROUTE_BUDGET = 4, routeBudget = ROUTE_BUDGET;
+  var ARRIVE_SPREAD = 45, DISMISS_SPREAD = 55;      // real seconds over which arrivals / departures are spread
   function planStudent(n, snap) {
+    if (n.pend) {                                          // waiting to get off the bus
+      if (clock.now < n.pend.at || routeBudget <= 0) return;
+      routeBudget--;
+      var pd = n.pend.dest; n.pend = null; n.hidden = false; n.node = -1; n.dest = null; placeAt(n, pickSpot('drop')); goTo(n, pd, 0); return;
+    }
     var t = clock.t, b = BLOCKS[n.group], ci = blockIndex(n.group, t), dest, act;
     if (ci < 0 || b[ci][1] === 'hidden') { n.hidden = true; n.path = null; n.blk = ci; n.act = 'hidden'; n.dest = null; n.node = -1; return; }
     if (snap) {
-      act = b[ci][1]; n.blk = ci; n.act = act; n.lookBlk = -1; dest = studentDest(n, act);
-      n.hidden = false; if (dest) placeAt(n, dest); return;
+      act = b[ci][1]; if (B) B.onAct(n, n.act, act); n.blk = ci; n.act = act; n.lookBlk = -1; dest = studentDest(n, act);
+      n.hidden = false; if (dest) { placeAt(n, dest); if (B) B.afterSnap(n, act, dest); } return;
     }
     var ti = ci, nb = ci + 1;
     if (nb < b.length && b[nb][1] !== 'dismiss' && b[nb][1] !== 'hidden' && n.blk >= 0) {
@@ -4908,25 +5107,42 @@ window.CAMPUS.site = {
       if (n.blk === nb || t >= b[nb][0] - tripMinutes(n, n.nextDest, b[nb][1])) ti = nb;      // once left, stay committed
     }
     if (ti === n.blk) return;
-    act = b[ti][1]; n.blk = ti; n.act = act;
-    dest = (n.lookBlk === ti && n.nextDest) ? n.nextDest : studentDest(n, act);
+    if (routeBudget <= 0) return;                          // try again next step
+    routeBudget--;
+    act = b[ti][1]; if (B) B.onAct(n, n.act, act); n.blk = ti; n.act = act;
+    dest = (n.lookBlk === ti && n.nextDest && act !== 'lunch') ? n.nextDest : (act === 'lunch' && B ? B.lunchDest(n) : studentDest(n, act));
     if (!dest) return;
-    if (act === 'arrive' || n.hidden) {                    // appears at the buses
-      n.hidden = false; n.node = -1; n.dest = null; var d0 = pickSpot('drop'); placeAt(n, d0);
-      goTo(n, dest, rnd() * 8); return;
+    if (act === 'arrive' || n.hidden) {                    // gets off a bus at some moment during the arrival period
+      n.hidden = true; n.node = -1; n.dest = null; n.pend = { dest: dest, at: clock.now + rnd() * ARRIVE_SPREAD }; return;
     }
     n.rushing = (act === 'recess');
     if (dest === n.dest) return;
-    goTo(n, dest, act === 'dismiss' ? rnd() * 10 : 0);
+    goTo(n, dest, act === 'dismiss' ? rnd() * DISMISS_SPREAD : 0);
     n.leaving = (act === 'dismiss');
   }
 
   // staff supervisors / coaches go a little early too
   var STAFF_LEAD = 12, tickRecess = false;
   function staffAct(g, t) { return (t >= T.MORNING && t < T.END) ? (t + STAFF_LEAD < T.DISMISS ? P.activity(g, t + STAFF_LEAD) : 'dismiss') : P.activity(g, t); }
-  function computeTick() { var t = clock.t; tickRecess = staffAct(0, t) === 'recess' || staffAct(1, t) === 'recess' || staffAct(2, t) === 'recess'; }
+  function computeTick() { var t = clock.t; tickRecess = false; for (var g = 0; g < SCHED.length && !tickRecess; g++) tickRecess = staffAct(g, t) === 'recess'; }
 
+  // Teachers walk their class to lunch and to specials: they set off a little before the students, who then string out behind them.
+  var ESCORT_SPD = 1.3, LINE_SPD = 0.8;
+  function escortSpot(n, act) { var el = nav.spots['escort:cafe']; return act === 'lunch' ? el[n.cls.index % el.length] : nav.spots['stroll:' + L.specialRooms[n.cls.index % 6]][0]; }
+  function escortCtx(n, t) {
+    var g = n.group, b = BLOCKS[g], ci = blockIndex(g, t); if (ci < 0 || t < T.MORNING) return null;
+    var cur = b[ci];
+    if ((cur[1] === 'lunch' || cur[1] === 'specials') && t < cur[0] + 4.5) return 'escort:' + cur[1];
+    var nb = ci + 1;
+    if (nb < b.length && (b[nb][1] === 'lunch' || b[nb][1] === 'specials') && n.dest) {
+      var d = escortSpot(n, b[nb][1]);
+      var lead = routeLen(n.dest.i, d.i) / (STAFF_SPD * ESCORT_SPD * n.speedMul) * clock.minPerSec * 1.4 + 2.0;
+      if (t >= b[nb][0] - lead) return 'escort:' + b[nb][1];
+    }
+    return null;
+  }
   function staffDest(n, t) {
+    if (n.ctx && n.ctx.indexOf('escort:') === 0) return escortSpot(n, n.ctx.substring(7));
     if (n.role === 'Teacher') {
       if (n.sup) {
         var act = staffAct(n.group, t);
@@ -4945,6 +5161,7 @@ window.CAMPUS.site = {
   }
   // the "mode" of a staff member; changing it triggers a new destination
   function staffCtx(n, t) {
+    if (n.role === 'Teacher') { var ec = escortCtx(n, t); if (ec) return ec; }
     if (n.role === 'Teacher' && n.sup) { var a = staffAct(n.group, t); return a === 'recess' ? 'recess' : a === 'dismiss' ? 'dismiss' : 'home'; }
     if (n.role === 'PE Coach') return tickRecess ? 'recess' : (t >= T.DISMISS && t < T.END ? 'dismiss' : 'home');
     if (n.roam) return (t >= T.ARRIVE && t < T.MORNING) ? 'arrive' : (t >= T.DISMISS && t < T.END) ? 'dismiss' : 'home';
@@ -4957,13 +5174,15 @@ window.CAMPUS.site = {
     n.ctx = c; n.hidden = false;
     var dest = staffDest(n, t); if (!dest) return;
     if (snap || n.node < 0) { placeAt(n, dest); n.wanderAt = clock.now + 6 + rnd() * 12; return; }
-    goTo(n, dest, rnd() * 4); n.wanderAt = clock.now + 8 + rnd() * 10;
+    var esc = c.indexOf('escort:') === 0; n.spdF = esc ? ESCORT_SPD : 1;
+    goTo(n, dest, esc ? 0 : rnd() * 4); n.wanderAt = clock.now + (esc ? 30 : 8 + rnd() * 10);
   }
   function plan(n, snap) { if (n.kind === 'student') planStudent(n, snap); else planStaff(n, snap); }
 
   // ============================================================ per frame
   function stepNPC(n, dt) {
     if (n.hidden) return;
+    if (n.scr) { B.script(n, dt); return; }
     n.sit += ((n.sitTarget && !n.path ? 1 : 0) - n.sit) * Math.min(1, dt * 8);
     if (n.talkUntil > clock.now) { n.moving = false; return; }
     if (!n.path) {
@@ -4971,13 +5190,17 @@ window.CAMPUS.site = {
       if (n.kind === 'student') {                           // wander between recess spots
         if (n.act === 'recess' && clock.now > n.wanderAt) {
           n.wanderAt = clock.now + 6 + rnd() * 10;
-          var d = pickSpot('rec:' + n.recessZone); if (d && d !== n.dest) goTo(n, d, rnd() * 2);
+          if (!B || !B.recess(n)) { var d = pickSpot('rec:' + n.recessZone); if (d && d !== n.dest) goTo(n, d, rnd() * 2); }
         }
       } else if (clock.now > n.wanderAt) {
         n.wanderAt = clock.now + (n.roam ? 7 : 10) + rnd() * (n.roam ? 12 : 18);
         var key = (n.ctx === 'recess' || n.ctx === 'dismiss' || n.ctx === 'arrive') ? null : n.stroll[Math.floor(rnd() * n.stroll.length)];
         if (n.ctx === 'lunch') key = 'stroll:counter';
-        if (key) { var dd = pickSpot(key); if (dd && dd !== n.dest) goTo(n, dd, 0); }
+        var dd = null;
+        if (B && n.role === 'Teacher') dd = B.teacherNext(n, key);            // pace the front, sometimes an aisle; patrol on yard duty
+        else if (B && n.role === 'PE Coach' && n.ctx === 'recess') dd = B.dutyNext(n);
+        else if (key) dd = pickSpot(key);
+        if (dd && dd !== n.dest) goTo(n, dd, 0);
       }
       if (n.faceTo != null) { var df = Math.atan2(Math.sin(n.faceTo - n.h), Math.cos(n.faceTo - n.h)); n.h += df * Math.min(1, dt * 8); }
       return;
@@ -4986,8 +5209,15 @@ window.CAMPUS.site = {
     n.sitTarget = false; n.sit = Math.max(0, n.sit - dt * 6);
     var node = nav.nodes[n.path[n.pi]], last = n.pi === n.path.length - 1;
     var tx = last ? node.x + n.jx : node.x, tz = last ? node.z + n.jz : node.z;
+    if (node.lane) {                                                    // two lanes on the stair flights: keep to the right of the direction of travel
+      var ldx = 0, ldz = 0;                                              // direction of travel along this stretch (stable: from node to node)
+      if (n.pi > 0) { ldx = node.x - nav.nodes[n.path[n.pi - 1]].x; ldz = node.z - nav.nodes[n.path[n.pi - 1]].z; }
+      else if (n.path.length > 1) { ldx = nav.nodes[n.path[1]].x - node.x; ldz = nav.nodes[n.path[1]].z - node.z; }
+      var ll = Math.hypot(ldx, ldz); if (ll > 0.01) { tx += -ldz / ll * 0.55; tz += ldx / ll * 0.55; }
+    }
     var dx = tx - n.x, dz = tz - n.z, dist = Math.hypot(dx, dz);
-    var spd = (n.kind === 'student' ? STUDENT_SPD : STAFF_SPD) * n.speedMul * (n.rushing && n.act === 'recess' ? RECESS_RUSH : 1);
+    var spd = (n.kind === 'student' ? STUDENT_SPD : STAFF_SPD) * n.speedMul * (n.rushing && n.act === 'recess' ? RECESS_RUSH : 1) * n.spdF;
+    if (B) spd = B.gate(n, spd);
     var step = spd * dt;
     if (dist <= step + 0.02) {
       n.x = tx; n.z = tz; n.node = node.i; n.pi++; n.stuck = 0; n.level = node.level;
@@ -5006,7 +5236,7 @@ window.CAMPUS.site = {
       n.amp += (Math.min(1.2, spd / 4.0) - n.amp) * Math.min(1, dt * 8);
       n.phase += dt * spd * 2.4;
       // stuck watchdog: no progress for 2.5 s -> jump to the node
-      if (Math.abs(dist - n.lastD) < 0.01) { n.stuck += dt; if (n.stuck > 2.5) { n.x = tx; n.z = tz; n.stuck = 0; } } else n.stuck = 0;
+      if (Math.abs(dist - n.lastD) < 0.01 && !n.gated) { n.stuck += dt; if (n.stuck > 2.5) { n.x = tx; n.z = tz; n.stuck = 0; } } else n.stuck = 0;
       n.lastD = dist;
     }
     // height: the walking surface (floor or stair flight; switches level on the stairs) plus
@@ -5015,17 +5245,36 @@ window.CAMPUS.site = {
     L.surface(n); n.y += n.yo;
   }
 
+  // Walking characters push away from anybody closer than 0.6 m.  A uniform grid (1.2 m cells) keeps this cheap with hundreds of
+  // characters; the wall/furniture resolver only runs for the ones that were actually pushed.
+  var GX0 = -150, GZ0 = -90, GW = 280, GH = 170, CELL = 1.2;
+  var gHead = new Int32Array(GW * GH), gNext = new Int32Array(1024);
+  var sepStep = 0;
   function separate(dt) {
-    var k = Math.min(1, dt * 6);
-    for (var i = 0; i < npcs.length; i++) {
-      var a = npcs[i]; if (a.hidden || !a.moving) continue;
-      for (var j = 0; j < npcs.length; j++) {
-        if (i === j) continue; var b = npcs[j]; if (b.hidden || b.sit > 0.5 || b.level !== a.level) continue;
-        var dx = a.x - b.x, dz = a.z - b.z, d2 = dx * dx + dz * dz;
-        if (d2 < 0.36 && d2 > 1e-6) { var d = Math.sqrt(d2), push = (0.6 - d) * 0.5 * k; a.x += dx / d * push; a.z += dz / d * push; }
+    var k = Math.min(1, dt * 6), i, n = npcs.length; sepStep++;
+    if (gNext.length < n) gNext = new Int32Array(n * 2);
+    gHead.fill(-1);
+    for (i = 0; i < n; i++) {
+      var o = npcs[i]; if (o.hidden || o.sit > 0.5) { continue; }
+      var cx = ((o.x - GX0) / CELL) | 0, cz = ((o.z - GZ0) / CELL) | 0; if (cx < 0 || cz < 0 || cx >= GW || cz >= GH) continue;
+      var ci = cx * GH + cz; gNext[i] = gHead[ci]; gHead[ci] = i;
+    }
+    for (i = 0; i < n; i++) {
+      var a = npcs[i]; if (a.hidden) continue;
+      if (!a.moving) {                                    // standing: only the occasional wall check
+        if (a.sit < 0.5 && !a.scr && (i + sepStep) % 8 === 0) { var r0 = L.resolve(a.x, a.z, 0.26, true, a.level); a.x = r0.x; a.z = r0.z; }
+        continue;
       }
-      var r = L.resolve(a.x, a.z, 0.26, true, a.level); a.x = r.x; a.z = r.z;
-      L.surface(a); a.y += a.yo;               // keep the height right after being pushed (stairs)
+      var ax = ((a.x - GX0) / CELL) | 0, az = ((a.z - GZ0) / CELL) | 0; if (ax < 1 || az < 1 || ax >= GW - 1 || az >= GH - 1) continue;
+      var pushed = false;
+      for (var gx = ax - 1; gx <= ax + 1; gx++) for (var gz = az - 1; gz <= az + 1; gz++) {
+        for (var j = gHead[gx * GH + gz]; j >= 0; j = gNext[j]) {
+          if (j === i) continue; var b = npcs[j]; if (b.level !== a.level) continue;
+          var dx = a.x - b.x, dz = a.z - b.z, d2 = dx * dx + dz * dz;
+          if (d2 < 0.36 && d2 > 1e-6) { var d = Math.sqrt(d2), push = (0.6 - d) * 0.5 * k; a.x += dx / d * push; a.z += dz / d * push; pushed = true; }
+        }
+      }
+      if (pushed || ((i + sepStep) % 4 === 0 && !a.scr)) { var r = L.resolve(a.x, a.z, 0.26, true, a.level); a.x = r.x; a.z = r.z; L.surface(a); a.y += a.yo; }       // (everybody gets a wall check every fourth step)   // keep the height right after being pushed (stairs)
     }
   }
 
@@ -5132,16 +5381,17 @@ window.CAMPUS.site = {
     player = makeNPC('player', 'You', 'Player'); player.s = 1.24; player.shirt = L.schoolColor; player.pants = '#2F4B7C'; player.skin = '#E0AC69';
     player.hairColor = '#2B1B10'; player.hairStyle = 0; player.pack = '#FFD23F'; player.hidden = false; player.id = 0;
     makeParts(scene); makeTags(scene);
+    B = S.behavior; if (B) B.init(P.core);
     computeTick();
     P.snapAll(true);
   };
   // Teleport everybody to where they belong right now.  With `initial`, students
   // who would be arriving instead start at the buses so the first minutes look alive.
   P.snapAll = function (initial) {
-    computeTick();
+    computeTick(); if (B) B.reset();
     for (var i = 0; i < npcs.length; i++) {
       var n = npcs[i]; if (n === player) continue;
-      n.act = ''; n.ctx = ''; n.node = -1; n.path = null; n.leaving = false; n.blk = -2; n.lookBlk = -1; n.resv = null;
+      n.act = ''; n.ctx = ''; n.node = -1; n.path = null; n.leaving = false; n.pend = null; n.blk = -2; n.lookBlk = -1; n.resv = null;
       if (n.dest) { occ[n.dest.i] = Math.max(0, (occ[n.dest.i] || 1) - 1); n.dest = null; }
       if (initial && n.kind === 'student' && P.activity(n.group, clock.t) === 'arrive') { n.hidden = true; plan(n, false); } else plan(n, true);
     }
@@ -5149,6 +5399,7 @@ window.CAMPUS.site = {
   P.setTime = function (hours) { clock.t = hours * 60; P.snapAll(); };
 
   var camT = 0;
+  var prof = P.prof = { step: 0, beh: 0, sep: 0 };      // accumulated milliseconds (read by the perf tests)
   // view options set by main.js: hideUpper = the second floor is hidden (player downstairs
   // inside); thirdPerson = hide anyone within 1.5 m of the camera so they do not block the view
   P.view = { hideUpper: false, thirdPerson: false };
@@ -5160,17 +5411,28 @@ window.CAMPUS.site = {
       clock.now += dt; clock.t += dt * clock.minPerSec;
       if (clock.t >= T.RESET) { clock.t = T.MORNING_RESTART; P.snapAll(); }
       computeTick();
+      routeBudget = ROUTE_BUDGET;
+      var q0 = performance.now();
       for (i = 0; i < npcs.length; i++) { var n = npcs[i]; if (n === player) continue; plan(n, false); stepNPC(n, dt); }
+      var q1 = performance.now();
+      if (B) B.update(dt);
+      var q2 = performance.now();
       separate(dt);
+      var q3 = performance.now(); prof.step += q1 - q0; prof.beh += q2 - q1; prof.sep += q3 - q2;
     }
     camT += dt;
     // matrices: limbs only near the camera
     var cx = camera.position.x, cy = camera.position.y, cz = camera.position.z, hideUp = P.view.hideUpper, tp = P.view.thirdPerson;
+    var pl = plevel || 0, t0 = performance.now(), pOnStair = !!L.stairAt(px, pz);
+    if (B) B.beginRender(px, pz, pl, camT);
     for (i = 0; i < npcs.length; i++) {
       var q = npcs[i], ddx = q.x - cx, ddz = q.z - cz, ddy = q.y + 0.8 - cy;
       q.cull = q !== player && ((hideUp && q.level === 1 && !L.stairAt(q.x, q.z)) || (tp && ddx * ddx + ddz * ddz + ddy * ddy < 2.25));
+      // full animation: within ~35 m of the camera and on the player's floor (stair towers count for both); everyone else is position-only
+      if (B && q !== player && !q.hidden) B.pose(q, dt, ddx * ddx + ddz * ddz < 1225 && (q.level === pl || pOnStair || L.stairAt(q.x, q.z)));
       renderNPC(i, q, Math.abs(ddx) + Math.abs(ddz) < 80 || q === player, camT);
     }
+    P.renderMs = performance.now() - t0;
     for (k = 0; k < ALL_KEYS.length; k++) parts[ALL_KEYS[k]].instanceMatrix.needsUpdate = true;
     updateTags(px, pz, plevel || 0);
   };
@@ -5179,8 +5441,701 @@ window.CAMPUS.site = {
   // characters actually drawn on a given level (for tests)
   P.drawnOnLevel = function (lv) { var c = 0; for (var i = 0; i < npcs.length; i++) { var n = npcs[i]; if (!n.hidden && !n.cull && n !== player && n.level === lv) c++; } return c; };
   P.count = function () { return npcs.length - 1; };
+  P.LINE_SPD = LINE_SPD;
   P.parts = function () { return parts; };
+  // internals shared with behavior.js
+  P.core = { npcs: npcs, nav: nav, clock: clock, goTo: goTo, placeAt: placeAt, setDest: setDest, pickSpot: pickSpot, rnd: function () { return rnd(); }, unstack: unstack, STUDENT_SPD: STUDENT_SPD, STAFF_SPD: STAFF_SPD };
   P.player = function () { return player; };
+})();
+
+</script>
+<script>
+// ---- js/behavior.js ----
+/*
+ * behavior.js - lifelike behaviour for the (cartoon) characters.
+ *
+ * Everything here works on the existing per-character InstancedMesh parts: it only sets pose fields
+ * on the character objects (head yaw/pitch, arm angle/splay, leg offsets, lean, hop, sway) that
+ * people.js turns into per-instance matrices, moves a few scripted characters (swing, slide, tag),
+ * and runs the small group games (basketball, kickball, jump rope, PE ball passing).  Two extra
+ * instanced meshes exist in people.js: the lunch tray (one per character) and 28 shared balls.
+ *
+ * Level of detail: B.pose() is only called with full = true for characters within ~35 m of the
+ * camera on the player's floor; everybody else keeps position-only (their pose is reset once).
+ * Nothing in the per-frame path allocates.
+ */
+(function () {
+  'use strict';
+  if (!window.THREE) return;
+  var S = window.CAMPUS, L = S.layout, nav = S.nav, P = S.people;
+  var B = S.behavior = {};
+  var core, npcs, clock, A, rnd;
+  var PI = Math.PI;
+
+  function hash(a, b) { var x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); }
+  function wrap(a) { while (a > PI) a -= 2 * PI; while (a < -PI) a += 2 * PI; return a; }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function ez(c, t, k) { return c + (t - c) * k; }
+
+  // ===================================================================== setup
+  var QMAX = 26, SERVE = 0.7;             // serving line slots, seconds per tray
+  var qs = [], ov = [], serveT = 0;        // line (slot 0 = head), students waiting at their seats for room in the line
+  var BALL = { hoop: 0, kick: 2, pe: 6 };  // first ball index of each game
+  var peRing = [];
+  var swingN = 0;
+  B.stats = { maxQueue: 0, served: 0, maxWait: 0, byWave: [0, 1, 2, 3, 4].map(function () { return { maxQueue: 0, served: 0, unserved: 0, maxWait: 0 }; }) };
+
+  B.init = function (c) {
+    core = c; npcs = c.npcs; clock = c.clock; rnd = c.rnd; A = nav.act;
+    A.arenas.forEach(function (a) { a.members = []; a.it = null; a.cool = 0; });
+    A.hoops.forEach(function (g, gi) { g.m = [null, null, null, null]; g.ball = { st: 'hold', t: 0, holder: null, k: BALL.hoop + gi, x: 0, y: 0, z: 0 }; });
+    A.kicks.forEach(function (g, gi) { g.m = [null, null, null, null, null]; g.ball = { st: 'wait', t: 0, holder: null, to: null, k: BALL.kick + gi, x: 0, y: 0, z: 0 }; });
+    A.hops.forEach(function (g) { g.m = [null, null, null]; });
+    ['gym-34_16', 'gym-34_24', 'gym-34_32', 'gym-34_38', 'gym-28_38', 'gym-22_38', 'gym-22_32', 'gym-22_24', 'gym-22_16', 'gym-28_16'].forEach(function (nm) {
+      var h = nav.hubByName(nm); if (h) peRing.push(h);
+    });
+    B.reset();
+  };
+  B.reset = function () {
+    qs.length = 0; ov.length = 0; serveT = 0; pePhase = -1;
+    A.arenas.forEach(function (a) { a.members.length = 0; a.it = null; });
+    A.hoops.forEach(function (g) { for (var i = 0; i < g.m.length; i++) g.m[i] = null; g.ball.st = 'hold'; g.ball.holder = null; P.hideBall(g.ball.k); });
+    A.kicks.forEach(function (g) { for (var i = 0; i < g.m.length; i++) g.m[i] = null; g.ball.st = 'wait'; g.ball.holder = null; P.hideBall(g.ball.k); });
+    A.hops.forEach(function (g) { for (var i = 0; i < g.m.length; i++) g.m[i] = null; });
+    if (L.swingList) L.swingList.forEach(function (s) { s.taken = null; s.target = 0.2; });
+    A.bench.forEach(function (s) { s.taken = null; });
+    slideN = 0; slideLast = 0;
+    for (var i = 0; i < npcs.length; i++) {
+      var n = npcs[i]; n.scr = null; n.stT = null; n.stO = null; n.stI = -1; n.prop = 0; n.lphase = 0; n.spdF = 1; n.lineUp = false; n.mate = null; n.peOn = 0; n.curSpd = 0;
+      n.waveUntil = 0; n.waveCool = 0; n.raise = 0; n.posed = false; n.hy = n.hp = n.aL = n.aR = n.wL = n.wR = n.zL = n.zR = n.lL = n.lR = n.ln = n.jy = n.sx = 0;
+    }
+    for (i = 0; i < P.BALLS; i++) P.hideBall(i);
+  };
+
+  // ============================================================ lunch / serving line
+  // The line is a row of hubs along the counter wall.  A student who has to wait longer than the line is long
+  // sits at their own seat until there is room.
+  // Walk to the cafeteria door first; the line forms in the order people actually get there.
+  var cafeIn = null;
+  B.lunchDest = function (n) {
+    cafeIn = cafeIn || nav.hubByName('cafeIn');
+    n.lphase = -1; n.qT = clock.now; n.gotTray = false;       // -1: on the way to the cafeteria
+    return cafeIn;
+  };
+  function joinLine(n) {
+    n.qT = clock.now;
+    if (qs.length < QMAX) { qs.push(n); n.lphase = 1; qMove(n, qs.length - 1, 0); }
+    else { ov.push(n); n.lphase = 0; core.goTo(n, seatOf(n), 0); }
+  }
+  function seatOf(n) { var l = nav.spots.lunch; return l[n.lunchIdx % l.length]; }
+  function qMove(n, slot, wait) {
+    var to = nav.queue[slot], from = n.node >= 0 ? nav.nodes[n.node] : null;
+    n.spdF = (from && Math.hypot(from.x - to.x, from.z - to.z) < 1.2) ? 0.6 : P.LINE_SPD;
+    if (n.path || n.dest !== to) core.goTo(n, to, wait);
+  }
+  function leaveLunch(n) {
+    var i = qs.indexOf(n); if (i >= 0) { qs.splice(i, 1); for (var j = i; j < qs.length; j++) qMove(qs[j], j, 0); }
+    i = ov.indexOf(n); if (i >= 0) ov.splice(i, 1);
+    if (!n.gotTray && n.cls) { B.stats.byWave[n.cls.wave].unserved++; (B.stats.unservedLog = B.stats.unservedLog || []).push([n.name, n.cls.id, n.lphase, +n.x.toFixed(1), +n.z.toFixed(1), !!n.path, qs.length, ov.length]); }
+    n.gotTray = false; n.prop = 0; n.lphase = 0; n.spdF = 1;
+  }
+  var STATIONS = 5;                          // trays are handed out at the first five places of the line at once (the counter is 12 m long)
+  var headStuck = 0;
+  function updateLunch(dt) {
+    if (qs.length > B.stats.maxQueue) B.stats.maxQueue = qs.length;
+    if (qs.length && qs[0].cls && qs.length > B.stats.byWave[qs[0].cls.wave].maxQueue) B.stats.byWave[qs[0].cls.wave].maxQueue = qs.length;
+    while (qs.length < QMAX && ov.length) {                       // somebody who was waiting seated gets up for the line
+      var m = ov.shift(); if (m.act !== 'lunch') continue;
+      m.lphase = 1; m.qT = clock.now; qs.push(m); qMove(m, qs.length - 1, 0);
+    }
+    serveT -= dt; if (serveT > 0 || !qs.length) return;
+    // a head that cannot get to its place (blocked) is put there after a few seconds
+    var h0 = qs[0];
+    if (h0 && (h0.path || h0.node !== nav.queue[0].i)) { headStuck += dt; if (headStuck > 6) { headStuck = 0; core.placeAt(h0, nav.queue[0]); } } else headStuck = 0;
+    var served = 0;
+    for (var s = 0; s < STATIONS && s < qs.length; s++) {
+      var h = qs[s - served];
+      if (h.path || h.node !== nav.queue[s].i) break;       // not at the counter yet
+      qs.splice(s - served, 1); served++; B.stats.served++;
+      var w = clock.now - h.qT, bw = B.stats.byWave[h.cls.wave]; if (w > B.stats.maxWait) B.stats.maxWait = w; if (w > bw.maxWait) bw.maxWait = w; bw.served++; h.gotTray = true;
+      h.prop = 1; h.lphase = 3; h.spdF = P.LINE_SPD; core.goTo(h, seatOf(h), 0.35 + s * 0.15);
+    }
+    if (served) { serveT = SERVE; for (var j = 0; j < qs.length; j++) qMove(qs[j], j, 0.05 + j * 0.012); }   // the line shuffles forward, front first
+  }
+
+  B.queueInfo = function () { return { line: qs.length, waiting: ov.length, headReady: !!(qs[0] && !qs[0].path && qs[0].node === nav.queue[0].i), headPath: !!(qs[0] && qs[0].path) }; };
+
+  // ======================================================== activity hooks from people.js
+  B.onAct = function (n, old, act) {
+    if (old === 'recess' && act !== 'recess') release(n);
+    if (old === 'lunch' && act !== 'lunch') leaveLunch(n);
+    if (old === 'specials') { n.peOn = 0; n.spdF = 1; }
+    n.lineUp = (act === 'lunch' || act === 'specials' || act === 'class' || act === 'recess');
+    n.spdF = (act === 'lunch' || act === 'specials') ? P.LINE_SPD : 1; n.mate = null;
+  };
+  B.afterSnap = function (n, act, dest) {
+    n.lineUp = false;
+    if (act !== 'lunch') return;
+    var b = P.blocks[n.group][n.blk], el = Math.max(0, (clock.t - b[0]) / clock.minPerSec), served = Math.floor(el / SERVE) * STATIONS, rank = n.lunchIdx;
+    if (rank < served) { n.prop = 1; n.lphase = 3; n.gotTray = true; }
+    else if (rank < served + QMAX) {
+      var slot = rank - served; core.placeAt(n, nav.queue[slot]); qs[slot] = n; n.lphase = 1; n.qT = clock.now;
+    } else { n.lphase = 0; var k = 0; while (k < ov.length && ov[k].lunchIdx < rank) k++; ov.splice(k, 0, n); }
+  };
+
+  // ================================================================== recess stations
+  var slideN = 0, slideLast = 0;
+  var ZONE_OPTS = { playground: ['swing', 'slide', 'bench', 'tag', 'swing', 'hop', 'bench', 'slide'], field: ['kick', 'tag', 'kick', 'hop'], court: ['hoop', 'tag', 'hoop'] };
+  function arenaOf(zone) { for (var i = 0; i < A.arenas.length; i++) if (A.arenas[i].zone === zone) return A.arenas[i]; return null; }
+  function claimSlot(arr, n) { for (var i = 0; i < arr.length; i++) if (!arr[i]) { arr[i] = n; return i; } return -1; }
+  function tryClaim(n, type) {
+    var zone = n.recessZone, i, g;
+    if (type === 'swing') {
+      var sl = L.swingList; if (!sl) return null;
+      var k0 = Math.floor(rnd() * sl.length);
+      for (i = 0; i < sl.length; i++) { var q = (i + k0) % sl.length; if (!sl[q].taken) { sl[q].taken = n; n.stT = 'swing'; n.stO = sl[q]; n.stI = q; return A.swing[q]; } }
+    } else if (type === 'slide') {
+      if (slideN >= 3) return null; slideN++; n.stT = 'slide'; n.reps = 2 + Math.floor(rnd() * 3); return A.slideFoot;
+    } else if (type === 'bench') {
+      var k1 = Math.floor(rnd() * A.bench.length);
+      for (i = 0; i < A.bench.length; i++) { var b = A.bench[(i + k1) % A.bench.length]; if (!b.taken && (b.mate.taken || rnd() < 0.6)) { b.taken = n; n.stT = 'bench'; n.stO = b; return b; } }
+    } else if (type === 'tag') {
+      var a = arenaOf(zone); if (!a || a.members.length >= 6) return null; a.members.push(n); n.stT = 'tag'; n.stO = a; return a.spot;
+    } else if (type === 'hop') {
+      for (i = 0; i < A.hops.length; i++) { g = A.hops[i]; if (g.zone !== zone) continue; var s = claimSlot(g.m, n); if (s >= 0) { n.stT = 'hop'; n.stO = g; n.stI = s; return g.spots[s]; } }
+    } else if (type === 'hoop') {
+      for (i = 0; i < A.hoops.length; i++) { g = A.hoops[(i + (n.id & 1)) % A.hoops.length]; var s2 = claimSlot(g.m, n); if (s2 >= 0) { n.stT = 'hoop'; n.stO = g; n.stI = s2; return g.spots[s2]; } }
+    } else if (type === 'kick') {
+      var k2 = Math.floor(rnd() * A.kicks.length);
+      for (i = 0; i < A.kicks.length; i++) { g = A.kicks[(i + k2) % A.kicks.length]; var s3 = claimSlot(g.m, n); if (s3 >= 0) { n.stT = 'kick'; n.stO = g; n.stI = s3; return g.spots[s3]; } }
+    }
+    return null;
+  }
+  function releaseRef(n) {
+    var o = n.stO, i;
+    switch (n.stT) {
+      case 'swing': o.taken = null; o.target = 0.2; break;
+      case 'slide': slideN = Math.max(0, slideN - 1); break;
+      case 'bench': o.taken = null; break;
+      case 'tag': i = o.members.indexOf(n); if (i >= 0) o.members.splice(i, 1); if (o.it === n) o.it = null; break;
+      case 'hop': case 'hoop': case 'kick': if (o.m[n.stI] === n) o.m[n.stI] = null; if (o.ball && o.ball.holder === n) o.ball.holder = null; break;
+    }
+    n.stT = null; n.stO = null; n.stI = -1;
+  }
+  // End a station / script (the recess is over, or the kid moves on).  A child on the swing or the slide is not snapped
+  // off: the script is told to finish (step off the swing, finish the slide run) and the walk to the next place starts afterwards.
+  function release(n) {
+    if (n.scr) {
+      var t = n.scr.type;
+      if (t === 'swing' || t === 'slide') { n.scr.ending = true; n.rEnd = 0; n.arrived = false; return; }
+      n.scr = null; n.moving = false;
+    }
+    if (n.stT) releaseRef(n);
+    n.rEnd = 0; n.arrived = false; n.spdF = 1; n.lL = n.lR = 0;
+  }
+  // called when a recess kid has been standing for a while: pick the next thing to do.  true = handled here
+  B.recess = function (n) {
+    if (n.stT === 'slide' && n.reps > 0) { n.reps--; n.arrived = false; core.goTo(n, A.slideFoot, 0); n.lineUp = false; n.wanderAt = Infinity; return true; }
+    release(n);
+    n.lineUp = false; n.mate = null;
+    var opts = ZONE_OPTS[n.recessZone];
+    if (opts && rnd() < 0.82) {
+      var k0 = Math.floor(rnd() * opts.length);
+      for (var i = 0; i < opts.length; i++) {
+        var sp = tryClaim(n, opts[(i + k0) % opts.length]);
+        if (sp) {
+          n.arrived = false; n.wanderAt = Infinity; n.rDur = 14 + rnd() * 22;
+          var far = Math.hypot(n.x - sp.x, n.z - sp.z) > 1.0;           // a finished game can leave the child away from the node they are 'at': then walk there
+          if (n.dest !== sp || n.path || far) core.goTo(n, sp, rnd() * 1.5, far); else n.wanderAt = clock.now + n.rDur;
+          n.arrived = n.dest === sp && !n.path; if (n.arrived) startStation(n);
+          return true;
+        }
+      }
+    }
+    return false;                                                   // plain chat spot (people.js picks one)
+  };
+  // staff on yard duty: the next point along the edge
+  B.dutyNext = function (n) {
+    var zone = n.role === 'PE Coach' ? (n.coachNo ? 'court' : 'field') : (n.cls ? n.cls.students[0].recessZone : 'playground'), l = A.patrol[zone];
+    if (!l) return null; n.pcur = ((n.pcur || 0) + 1) % l.length; n.spdF = 0.7; return l[n.pcur];
+  };
+  B.teacherNext = function (n, key) {
+    if (n.ctx === 'recess') return B.dutyNext(n);
+    if (n.ctx.indexOf('escort:') === 0) return null;                  // waits at the destination until the class is settled
+    n.spdF = 1;
+    var inClass = n.ctx === 'home' && n.cls && n.cls.students[0].act === 'class';
+    if (inClass) {
+      n.spdF = 0.62;                                                // unhurried pacing
+      var fl = nav.spots['floor:' + n.cls.id];
+      if (fl && fl.length && rnd() < 0.2) return fl[Math.floor(rnd() * fl.length)];   // sometimes down an aisle
+    }
+    return key ? core.pickSpot(key) : null;
+  };
+
+  // station begins once the kid is standing on its spot
+  function startStation(n) {
+    var o = n.stO, now = clock.now;
+    n.wanderAt = now + (n.rDur || 20);
+    if (n.stT === 'swing') { n.scr = { type: 'swing', ph: 0, t: 0, dur: n.rDur, sd: o }; n.wanderAt = Infinity; o.target = 0.8; }
+    else if (n.stT === 'slide') { n.scr = { type: 'slide', ph: 0, t: 0 }; n.wanderAt = Infinity; slideLast = now; }
+    else if (n.stT === 'tag') {
+      n.scr = { type: 'tag', t: 0, vx: 0, vz: 0, until: now + n.rDur, ang: rnd() * 6.28 }; n.wanderAt = Infinity; n.moving = true;
+      var an = rnd() * 6.283; n.x += Math.cos(an) * 0.2; n.z += Math.sin(an) * 0.2;      // (they all arrive at the middle: a tiny nudge, then the chase spreads them out)
+    }
+    else if (n.stT === 'hoop' || n.stT === 'kick') { if (!o.ball.holder) o.ball.holder = n; }
+  }
+
+  // =================================================================== scripts
+  var TW = L.play.tower;
+  function ease3(u) { return u * u * (3 - 2 * u); }
+  B.script = function (n, dt) {
+    var sc = n.scr, k;
+    if (sc.type === 'swing') {
+      var sd = sc.sd, sp = A.swing[n.stI], th = sd.th; sc.t += dt;
+      n.sit += (1 - n.sit) * Math.min(1, dt * 10); n.moving = false; n.h = 0;
+      var sz = sd.z - 2.45 * Math.sin(th), sy = 3.0 - 2.45 * Math.cos(th) + 0.06 - 0.37 * n.s;
+      if (sc.ph === 0) {
+        k = ease3(Math.min(1, sc.t / 0.7)); n.x = sp.x + (sd.x - sp.x) * k; n.z = sp.z + (sz - sp.z) * k; n.y = (sy < 0 ? 0 : sy) * k;
+        if (sc.t >= 0.7) { sc.ph = 1; sc.t = 0; }
+      } else if (sc.ph === 1) {
+        n.x = sd.x; n.z = sz; n.y = sy;
+        if (sc.t > sc.dur || sc.ending) { sc.ph = 2; sc.t = 0; sd.target = 0.15; }
+      } else if (sc.ph === 2) {
+        n.x = sd.x; n.z = sz; n.y = sy;
+        if (sd.amp < 0.4 || sc.t > 4) { sc.ph = 3; sc.t = 0; }
+      } else {
+        k = ease3(Math.min(1, sc.t / 0.6)); n.x = sd.x + (sp.x - sd.x) * k; n.z = sz + (sp.z - sz) * k; n.y = Math.max(0, sy) * (1 - k);
+        if (sc.t >= 0.6) { n.scr = null; n.sit = 0; n.y = 0; releaseRef(n); n.wanderAt = clock.now + 0.5; n.rEnd = 0; }
+      }
+      return;
+    }
+    if (sc.type === 'slide') { slideScript(n, sc, dt); return; }
+    if (sc.type === 'tag') { n.moving = true; return; }     // moved by updateArenas
+  };
+  function slideScript(n, sc, dt) {
+    var tx = TW.x, tz = TW.z, s = n.s; sc.t += dt;
+    n.moving = false;
+    switch (sc.ph) {
+      case 0: {                                                    // walk from wherever we stood to the ladder (no snap to the foot)
+        if (sc.d0 === undefined) { sc.sx = n.x; sc.sz = n.z; sc.d0 = Math.max(0.5, Math.hypot(tx - n.x, tz - 1.75 - n.z) / 2.6); }
+        var u = Math.min(1, sc.t / sc.d0), e0 = ease3(u);
+        n.x = sc.sx + (tx - sc.sx) * e0; n.z = sc.sz + (tz - 1.75 - sc.sz) * e0; n.y = 0; n.h += wrap(0 - n.h) * Math.min(1, dt * 8);
+        n.moving = u < 1; n.amp = 0.8; n.phase += dt * 6; n.sit += (0 - n.sit) * Math.min(1, dt * 10);
+        if (sc.t >= sc.d0) { sc.ph = 1; sc.t = 0; } break; }
+      case 1: {                                                    // climb
+        var u1 = Math.min(1, sc.t / 2.2); n.x = tx; n.z = tz - 1.75; n.y = 1.78 * u1; n.h = 0;
+        if (sc.t >= 2.2) { sc.ph = 2; sc.t = 0; } break; }
+      case 2: {                                                    // across the platform to the slide
+        var u2 = ease3(Math.min(1, sc.t / 1.0)); n.x = tx + 1.45 * u2; n.z = tz - 1.75 + 1.75 * u2; n.y = 1.78; n.h = u2 * PI / 2;
+        if (sc.t >= 1.0) { sc.ph = 3; sc.t = 0; } break; }
+      case 3: {                                                    // sit and go: the board runs from the platform edge down 2.1 m over 2.9 m
+        n.sit += (1 - n.sit) * Math.min(1, dt * 12);
+        var u3 = Math.min(1, sc.t / 1.25), uu = u3 * u3 * 0.6 + u3 * 0.4;
+        n.x = tx + 1.45 + 3.0 * uu; n.z = tz;
+        n.y = 2.107 - 2.14 * uu + 0.12 - 0.37 * s;                // board surface + hip offset (same as a chair seat)
+        n.h = PI / 2; sc.yEnd = n.y;
+        if (sc.t >= 1.25) { sc.ph = 4; sc.t = 0; sc.jx = (rnd() - 0.5) * 0.6; sc.jz = (rnd() - 0.5) * 1.2; } break; }
+      default: {                                                   // stand up and step off
+        n.sit += (0 - n.sit) * Math.min(1, dt * 8); var u4 = Math.min(1, sc.t / 0.6), e4 = ease3(u4);
+        n.x = tx + 4.45 + (A.slideOut.x + sc.jx - tx - 4.45) * e4; n.z = tz + sc.jz * e4; n.y = sc.yEnd * (1 - e4) + L.surfaceY(n.x, n.z, 0) * e4; n.h = PI / 2;
+        if (sc.t >= 0.6) {
+          n.scr = null; n.node = A.slideOut.i; n.dest = A.slideOut; n.y = L.surfaceY(n.x, n.z, 0); n.moving = false; n.sit = 0;
+          n.wanderAt = clock.now + 0.3; if (sc.ending) releaseRef(n);
+        }
+      }
+    }
+  }
+
+  // ----- tag: one chaser per arena; runners flee, the chaser swaps when it touches somebody
+  function updateArenas(dt) {
+    var now = clock.now, i, j, a, m, o;
+    for (var ai = 0; ai < A.arenas.length; ai++) {
+      a = A.arenas[ai]; var mem = a.members, cnt = 0;
+      for (i = 0; i < mem.length; i++) if (mem[i].scr && mem[i].scr.type === 'tag') cnt++;
+      if (!cnt) continue;
+      if (!a.it || a.it.stO !== a || !a.it.scr) { a.it = null; for (i = 0; i < mem.length; i++) if (mem[i].scr) { a.it = mem[i]; break; } a.cool = now + 1.0; }
+      for (i = 0; i < mem.length; i++) {
+        m = mem[i]; var sc = m.scr; if (!sc || sc.type !== 'tag') continue;
+        var tx = 0, tz = 0, spd = 0, dx, dz, d;
+        if (m === a.it) {
+          var best = 1e9, tgt = null;
+          for (j = 0; j < mem.length; j++) { o = mem[j]; if (o === m || !o.scr) continue; d = Math.hypot(o.x - m.x, o.z - m.z); if (d < best) { best = d; tgt = o; } }
+          if (tgt) {
+            dx = tgt.x - m.x; dz = tgt.z - m.z; d = Math.max(0.01, best); tx = dx / d; tz = dz / d; spd = now < a.cool ? 0.4 : 4.6;
+            if (d < 0.85 && now >= a.cool) { a.it = tgt; a.cool = now + 1.4; }
+          }
+        } else if (a.it) {
+          dx = m.x - a.it.x; dz = m.z - a.it.z; d = Math.max(0.01, Math.hypot(dx, dz));
+          sc.ang += (rnd() - 0.5) * 6 * dt;
+          var fl = d < 7 ? 1 : 0.15;
+          tx = dx / d * fl + Math.sin(sc.ang) * 0.9; tz = dz / d * fl + Math.cos(sc.ang) * 0.9;
+          spd = d < 7 ? 4.4 : 2.2;
+        }
+        // keep inside the arena: steer away from the edges
+        var mg = 1.8;
+        if (m.x < a.x0 + mg) tx += (a.x0 + mg - m.x); else if (m.x > a.x1 - mg) tx -= (m.x - (a.x1 - mg));
+        if (m.z < a.z0 + mg) tz += (a.z0 + mg - m.z); else if (m.z > a.z1 - mg) tz -= (m.z - (a.z1 - mg));
+        for (j = 0; j < mem.length; j++) {                          // do not pile up
+          o = mem[j]; if (o === m || !o.scr) continue; dx = m.x - o.x; dz = m.z - o.z; d = dx * dx + dz * dz;
+          if (d < 0.64 && d > 1e-4) { d = Math.sqrt(d); tx += dx / d * (0.8 - d) * 3; tz += dz / d * (0.8 - d) * 3; }
+        }
+        var len = Math.hypot(tx, tz); if (len < 1e-3) { len = 1; tx = 0; tz = 0; spd = 0; }
+        var want = spd * m.speedMul; sc.vx = ez(sc.vx, tx / len * want, Math.min(1, dt * 7)); sc.vz = ez(sc.vz, tz / len * want, Math.min(1, dt * 7));
+        m.x = clamp(m.x + sc.vx * dt, a.x0 + 0.3, a.x1 - 0.3); m.z = clamp(m.z + sc.vz * dt, a.z0 + 0.3, a.z1 - 0.3);
+        var sp = Math.hypot(sc.vx, sc.vz);
+        if (sp > 0.3) { m.h += wrap(Math.atan2(sc.vx, sc.vz) - m.h) * Math.min(1, dt * 10); }
+        m.moving = sp > 0.3; m.amp = ez(m.amp, Math.min(1.2, sp / 4), Math.min(1, dt * 8)); m.phase += dt * Math.max(sp, 0.01) * 2.4;
+        L.surface(m); m.y += m.yo;
+        if (now > sc.until) { endTag(m); }
+      }
+    }
+  }
+  function endTag(m) { m.scr = null; m.moving = false; releaseRef(m); m.wanderAt = clock.now + 0.2; }
+
+  // ----- the ball games
+  function ballAt(g, x, y, z) { g.ball.x = x; g.ball.y = y; g.ball.z = z; P.setBall(g.ball.k, x, y, z); }
+  function updateHoops(dt) {
+    for (var gi = 0; gi < A.hoops.length; gi++) {
+      var g = A.hoops[gi], b = g.ball, cnt = 0, i, h = b.holder;
+      for (i = 0; i < 4; i++) if (g.m[i] && g.m[i].stO === g && !g.m[i].path) cnt++;
+      if (!cnt) { P.hideBall(b.k); b.holder = null; continue; }
+      if (!h || h.stO !== g || h.path) { b.holder = h = null; for (i = 0; i < 4; i++) if (g.m[i] && !g.m[i].path) { h = b.holder = g.m[i]; break; } b.st = 'hold'; b.t = 0; if (!h) continue; }
+      b.t += dt;
+      var r = g.rim;
+      if (b.st === 'hold') {                                       // dribble beside the right hand
+        var ph = (b.t % 0.56) / 0.56, hy = 0.14 + 0.72 * Math.abs(Math.sin(ph * PI)) ;
+        ballAt(g, h.x + Math.sin(h.h) * 0.32 - Math.cos(h.h) * 0.2 * h.s, hy, h.z + Math.cos(h.h) * 0.32 + Math.sin(h.h) * 0.2 * h.s);
+        h.dribY = hy;
+        if (b.t > 3.2 + (h.id % 3)) { b.st = 'shot'; b.t = 0; b.fx = b.x; b.fy = 1.9 * h.s / 1.2; b.fz = b.z; h.faceTo = Math.atan2(r.x - h.x, r.z - h.z); }
+      } else if (b.st === 'shot') {                                // a high arc into the hoop
+        var u = Math.min(1, b.t / 1.25), sx = b.fx + (r.x - b.fx) * u, sz = b.fz + (r.z - b.fz) * u, sy = b.fy + (r.y - b.fy) * u + Math.sin(u * PI) * 1.6;
+        ballAt(g, sx, sy, sz); h.n = h.n || 0;
+        if (u >= 1) { b.st = 'drop'; b.t = 0; }
+      } else if (b.st === 'drop') {                                // falls through, bounces once, rolls to a team mate
+        var u2 = Math.min(1, b.t / 0.55); ballAt(g, r.x, 0.14 + (r.y - 0.14) * (1 - u2 * u2), r.z);
+        if (u2 >= 1) {
+          var nx = null, k0 = Math.floor(rnd() * 4);
+          for (i = 0; i < 4; i++) { var c = g.m[(i + k0) % 4]; if (c && c !== h && !c.path) { nx = c; break; } }
+          b.to = nx || h; b.st = 'pass'; b.t = 0; b.fx = r.x; b.fz = r.z;
+        }
+      } else {                                                     // pass: a chest pass in a low arc
+        var u3 = Math.min(1, b.t / 0.9), tx = b.to.x + Math.sin(b.to.h) * 0.3, tz = b.to.z + Math.cos(b.to.h) * 0.3;
+        ballAt(g, b.fx + (tx - b.fx) * u3, 0.14 + (0.9 - 0.14) * u3 + Math.sin(u3 * PI) * 0.5, b.fz + (tz - b.fz) * u3);
+        if (u3 >= 1) { b.holder = b.to; b.st = 'hold'; b.t = 0; }
+      }
+    }
+  }
+  function updateKicks(dt) {
+    for (var gi = 0; gi < A.kicks.length; gi++) {
+      var g = A.kicks[gi], b = g.ball, cnt = 0, i, h = b.holder;
+      for (i = 0; i < 5; i++) if (g.m[i] && g.m[i].stO === g && !g.m[i].path) cnt++;
+      if (cnt < 2) { P.hideBall(b.k); b.holder = null; b.st = 'wait'; continue; }
+      if (!h || h.stO !== g || h.path) { b.holder = h = null; for (i = 0; i < 5; i++) if (g.m[i] && !g.m[i].path) { h = b.holder = g.m[i]; break; } b.st = 'wait'; b.t = 0; if (!h) continue; }
+      b.t += dt;
+      if (b.st === 'wait') {
+        ballAt(g, h.x + Math.sin(h.h) * 0.5, 0.12, h.z + Math.cos(h.h) * 0.5);
+        if (b.t > 1.4 + (h.id % 4) * 0.2) {
+          var k0 = Math.floor(rnd() * 5), nx = null;
+          for (i = 0; i < 5; i++) { var c = g.m[(i + k0) % 5]; if (c && c !== h && !c.path && c.stO === g) { nx = c; break; } }
+          if (!nx) { b.t = 0; continue; }
+          b.to = nx; b.st = 'kick'; b.t = 0; b.fx = b.x; b.fz = b.z; h.kickT = 0; h.faceTo = Math.atan2(nx.x - h.x, nx.z - h.z);
+          b.dur = 0.7 + Math.hypot(nx.x - h.x, nx.z - h.z) * 0.12;
+        }
+      } else {
+        var u = Math.min(1, (b.t - 0.18) / b.dur);
+        if (b.t < 0.18) { h.kickT = b.t / 0.18; ballAt(g, b.fx, 0.12, b.fz); }
+        else {
+          var tx = b.to.x + Math.sin(b.to.h) * 0.5, tz = b.to.z + Math.cos(b.to.h) * 0.5;
+          ballAt(g, b.fx + (tx - b.fx) * u, 0.12 + Math.abs(Math.sin(u * PI * 2)) * 0.35 * (1 - u * 0.5), b.fz + (tz - b.fz) * u);
+          h.kickT = Math.max(-1, 1 - (b.t - 0.18) * 4);
+          if (u >= 1) { b.holder = b.to; b.st = 'wait'; b.t = 0; b.to.faceTo = Math.atan2(h.x - b.to.x, h.z - b.to.z); }
+        }
+      }
+    }
+  }
+
+  // ----- PE in the gym: 40 s of laps, 40 s of jumping jacks, 40 s of ball passing, repeated
+  var pePhase = -1, peBalls = [];
+  function updatePE(dt) {
+    var ph = Math.floor((clock.now % 120) / 40), i, n;
+    var gym = nav.spots['special:gym'];
+    if (ph !== pePhase) {
+      pePhase = ph;
+      for (i = 0; i < npcs.length; i++) {
+        n = npcs[i]; if (n.kind !== 'student' || n.act !== 'specials' || n.spRoom !== 'gym') continue;
+        if (ph === 0) { if (!n.path && n.dest && n.dest.key === 'special:gym') { n.peHome = n.dest; n.peOn = 1; n.lap = (n.seatIdx * 3) % peRing.length; n.spdF = 0.72; n.lineUp = false; core.goTo(n, peRing[n.lap], 0.1 * (n.seatIdx % 5)); } }
+        else if (n.peOn) { n.peOn = 0; n.spdF = 1; core.goTo(n, n.peHome, 0.2 * (n.seatIdx % 4)); }
+      }
+    }
+    if (ph === 0) {
+      for (i = 0; i < npcs.length; i++) {
+        n = npcs[i]; if (n.peOn !== 1 || n.path || n.act !== 'specials') continue;
+        n.lap = (n.lap + 1) % peRing.length; core.goTo(n, peRing[n.lap], 0);
+      }
+    }
+  }
+  var peSeq = 0;
+  // balls for the PE passing phase: pairs of neighbouring spots (x, x+4)
+  function updatePEBalls() {
+    var gym = nav.spots['special:gym']; if (!gym) return;
+    var any = false, used = 0;
+    if (pePhase === 2) {
+      for (var a = 0; a < 10; a++) {
+        var ia = Math.floor(a / 5) * 10 + (a % 5), ib = ia + 5;       // columns (0,1) and (2,3), same row
+        var pa = null, pb = null;
+        for (var i = 0; i < npcs.length; i++) { var n = npcs[i]; if (n.act === 'specials' && n.spRoom === 'gym' && !n.path && !n.hidden) { if (n.dest === gym[ia]) pa = n; else if (n.dest === gym[ib]) pb = n; } }
+        var k = BALL.pe + a;
+        if (pa && pb) {
+          var cyc = (clock.now * 0.7 + a * 0.37) % 2, u = cyc % 1, from = cyc < 1 ? pa : pb, to = cyc < 1 ? pb : pa;
+          P.setBall(k, from.x + (to.x - from.x) * u, 1.0 + Math.sin(u * PI) * 0.9, from.z + (to.z - from.z) * u);
+          pa.ballU = pb.ballU = u; pa.ballTo = cyc >= 1; pb.ballTo = cyc < 1; pa.ballMate = pb; pb.ballMate = pa; any = true; used++;
+        } else P.hideBall(k);
+      }
+    } else if (peSeq) { for (var q = 0; q < 10; q++) P.hideBall(BALL.pe + q); }
+    peSeq = pePhase === 2 ? 1 : 0;
+  }
+
+  // ================================================================ per sim step
+  var armT = 0;
+  B.update = function (dt) {
+    updateLunch(dt);
+    // stations: start once the kid has arrived on its spot, end when the time is up
+    var now = clock.now, slideRank = 0;
+    for (var i = 0; i < npcs.length; i++) {
+      var n = npcs[i];
+      if (n.lphase === -1 && n.act === 'lunch' && !n.hidden && !n.path && cafeIn && n.node === cafeIn.i) joinLine(n);
+      if (n.stT && n.act === 'recess' && !n.hidden) {
+        if (!n.arrived && !n.path && !n.scr && n.dest && n.node === n.dest.i) {
+          if (n.stT === 'slide' && now - slideLast < 2.6) {            // one child at a time up the ladder: the next ones queue behind the foot of it
+            var qx = A.slideFoot.x + (slideRank % 2 ? 0.4 : -0.4), qz = A.slideFoot.z - 0.8 - 0.7 * slideRank, qdx = qx - n.x, qdz = qz - n.z, qd = Math.hypot(qdx, qdz);
+            slideRank++;
+            if (qd > 0.06) {                                           // walk to the place in the queue (never jump)
+              var qs2 = Math.min(qd, 2.2 * dt); n.x += qdx / qd * qs2; n.z += qdz / qd * qs2; n.h += wrap(Math.atan2(qdx, qdz) - n.h) * Math.min(1, dt * 10);
+              n.moving = true; n.amp = 0.7; n.phase += dt * 5.5;
+            } else { n.moving = false; n.faceTo = 0; }
+          } else { n.arrived = true; startStation(n); }
+        }
+      }
+    }
+    updateArenas(dt); updateHoops(dt); updateKicks(dt); updatePE(dt); armT += dt;
+  };
+  var piT = 0;
+  B.beginRender = function (px, pz, pl, camT) { B.px = px; B.pz = pz; B.pl = pl; B.camT = camT; updatePEBalls(); };
+
+  // ================================================================ walking in lines
+  // A class walking together keeps ~0.9 m between neighbours: nobody overtakes (or crowds) a classmate who is walking
+  // the same way just ahead of them, so the class strings out into a loose line behind whoever leads (the teacher on escort).
+  B.gate = function (n, spd) {
+    var cl = n.cls;
+    // Line-up gating ends at the cafeteria door: children in the serving line (1) or carrying a tray to their seat (3) are not gated.
+    if (!n.lineUp || !cl || n.lphase === 1 || n.lphase === 3) { n.curSpd = spd; n.gated = false; return spd; }
+    var st = cl.students, fx = Math.sin(n.h), fz = Math.cos(n.h), lim = spd, i, m, dx, dz, al, lat, gap = L.stairAt(n.x, n.z) ? 1.3 : 0.9;
+    for (i = -1; i < st.length; i++) {
+      m = i < 0 ? cl.teacher : st[i];
+      if (m === n || m.hidden || !m.moving || m.level !== n.level) continue;
+      dx = m.x - n.x; dz = m.z - n.z; al = dx * fx + dz * fz;
+      if (al <= 0.05 || al > gap + 1.5) continue;
+      lat = dx * fz - dz * fx; if (lat > 0.55 || lat < -0.55) continue;
+      if (Math.sin(m.h) * fx + Math.cos(m.h) * fz < 0.6) continue;               // only people walking the same way
+      var l2 = m.curSpd + (al - gap) * 2.2; if (l2 < 0) l2 = 0; if (l2 < lim) lim = l2;
+    }
+    n.curSpd = lim; n.gated = lim < spd * 0.9; return lim;     // (gated waiting is not 'stuck': see the watchdog in people.js)
+  };
+
+  // ====================================================================== pose
+  // Targets for the current character; the helpers below fill them in and B.pose eases the character towards them.
+  var T = { hy: 0, hp: 0, ln: 0, sx: 0, aL: 0, wL: 0, zL: 0, aR: 0, wR: 0, zR: 0, lL: 0, lR: 0, jy: 0 };
+  function clearT() { T.hy = T.hp = T.ln = T.sx = T.aL = T.wL = T.zL = T.aR = T.wR = T.zR = T.lL = T.lR = T.jy = 0; }
+  function armsOut(l, r) { T.aL = l; T.wL = 1; T.aR = r; T.wR = 1; }
+
+  // nearest standing character of the same kind (for pairs who talk)
+  function findMate(n) {
+    var best = null, bd = 2.0 * 2.0;
+    for (var i = 0; i < npcs.length; i++) {
+      var o = npcs[i]; if (o === n || o.hidden || o.level !== n.level || o.moving || o.path || o.scr || o.sit > 0.2 || o.kind !== n.kind || (o.mate && o.mate !== n)) continue;
+      var dx = o.x - n.x, dz = o.z - n.z, d = dx * dx + dz * dz; if (d < bd && d > 0.16) { bd = d; best = o; }
+    }
+    return best;
+  }
+  function toward(n, x, z) { return wrap(Math.atan2(x - n.x, z - n.z) - n.h); }
+
+  B.pose = function (n, dt, full) {
+    if (!full) {                                                    // position only: ease back to the neutral pose, then stop touching it
+      if (n.posed) {
+        var k0 = Math.min(1, dt * 7);
+        n.hy *= 1 - k0; n.hp *= 1 - k0; n.wL *= 1 - k0; n.wR *= 1 - k0; n.zL *= 1 - k0; n.zR *= 1 - k0; n.lL *= 1 - k0; n.lR *= 1 - k0; n.ln *= 1 - k0; n.sx *= 1 - k0; n.jy = 0;
+        if (Math.abs(n.hy) + Math.abs(n.hp) + n.wL + n.wR + Math.abs(n.zL) + Math.abs(n.zR) + Math.abs(n.ln) + Math.abs(n.lL) + Math.abs(n.lR) < 0.02) { n.posed = false; n.hy = n.hp = n.wL = n.wR = n.zL = n.zR = n.lL = n.lR = n.ln = n.sx = 0; }
+      }
+      return;
+    }
+    n.posed = true;
+    var t = clock.now, id = n.id, sit = n.sit > 0.5;
+    clearT();
+    if (n.kind === 'student') studentPose(n, t, dt, sit); else staffPose(n, t, dt);
+    var kf = Math.min(1, dt * 18), ks = Math.min(1, dt * 7);
+    n.hy = ez(n.hy, T.hy, ks); n.hp = ez(n.hp, T.hp, ks); n.ln = ez(n.ln, T.ln, ks); n.sx = ez(n.sx, T.sx, ks);
+    n.wL = ez(n.wL, T.wL, kf); n.wR = ez(n.wR, T.wR, kf);
+    if (T.wL > 0.01) n.aL = ez(n.aL, T.aL, kf); if (T.wR > 0.01) n.aR = ez(n.aR, T.aR, kf);
+    n.zL = ez(n.zL, T.zL, kf); n.zR = ez(n.zR, T.zR, kf); n.lL = ez(n.lL, T.lL, kf); n.lR = ez(n.lR, T.lR, kf); n.jy = T.jy;
+  };
+
+  function studentPose(n, t, dt, sit) {
+    var id = n.id, act = n.act, moving = n.moving, scr = n.scr, st = n.stT, ph, g, cc, ef;
+    if (scr && scr.type === 'swing') {                              // hold the chains, pump the legs, lean with the swing
+      var sd = scr.sd, vel = Math.cos(t * 1.9 + sd.phase) * sd.amp;
+      armsOut(-2.1, -2.1); T.zL = 0.12; T.zR = -0.12; T.lL = T.lR = 0.55 * vel * (sd.amp > 0.3 ? 1 : 0.2); T.ln = -sd.th * 0.4; T.hp = -0.1;
+    } else if (scr && scr.type === 'slide') {
+      ph = scr.ph;
+      if (ph === 1) { cc = scr.t * 5.5; armsOut(-2.5 + Math.sin(cc) * 0.5, -2.5 - Math.sin(cc) * 0.5); T.lL = -Math.sin(cc) * 0.7; T.lR = Math.sin(cc) * 0.7; T.hp = -0.2; }
+      else if (ph === 2) { T.ln = 0.7; armsOut(-0.6, -0.6); T.hp = 0.3; }
+      else if (ph === 3) { armsOut(-2.6, -2.6); T.ln = -0.25; T.zL = 0.25; T.zR = -0.25; T.hp = -0.1; }
+    } else if (scr && scr.type === 'tag') {
+      T.ln = 0.2; T.hp = -0.05;
+      if (st && n.stO.it === n && moving) armsOut(-1.6 + Math.sin(t * 9) * 0.3, -1.6 - Math.sin(t * 9) * 0.3);
+    } else if (act === 'class' && sit && !moving) classPose(n, t);
+    else if (act === 'lunch' && sit && n.prop !== 1) {              // waiting for a place in the line: just chatting, no tray, no eating
+      T.hy = 0.7 * Math.sin(t * 0.4 + id * 2.1) * Math.sin(t * 0.17 + id); T.hp = 0.04; T.sx = 0.015 * Math.sin(t * 0.6 + id);
+    } else if (act === 'lunch' && sit) {
+      cc = (t + id * 1.37) % 5.2; ef = cc < 1.3 ? Math.sin(cc / 1.3 * PI) : 0;       // the hand goes to the mouth now and then
+      T.aR = -0.55 - 1.7 * ef; T.wR = 1; T.ln = 0.06; T.hp = 0.12 + ef * 0.05;
+      T.hy = 0.75 * Math.sin(t * 0.35 + id * 2.3) * (Math.sin(t * 0.21 + id) > 0 ? 1 : 0.25);
+    } else if (act === 'specials' && n.spRoom && !moving) specialPose(n, t, sit);
+    else if (st === 'bench' && sit) {
+      var mate = n.stO.mate && n.stO.mate.taken, talk = Math.sin(t * 0.8 + id * 1.9) > 0.1;
+      T.hy = mate ? toward(n, mate.x, mate.z) * 0.8 : 0.3 * Math.sin(t * 0.4 + id);
+      T.hp = talk ? 0.05 + 0.08 * Math.sin(t * 5 + id) : 0.1;
+      if (talk) { T.aR = -0.9 + Math.sin(t * 3.1 + id) * 0.45; T.wR = 1; T.zR = -0.25; }
+    } else if (st === 'hop' && n.arrived && !n.path) {
+      g = n.stO;
+      if (n.stI === 0) { var hp1 = (t * 1.5 + id * 0.2) % 1, hop = Math.abs(Math.sin(hp1 * PI)); T.jy = 0.2 * hop; armsOut(0, 0); T.zL = 0.5; T.zR = -0.5; T.lL = T.lR = hop * 0.3; T.hp = 0.15; }
+      else { cc = t * 6.0 + (n.stI === 1 ? 0 : PI); var sw = -0.5 + Math.sin(cc) * 0.9; armsOut(sw, sw); T.zL = 0.15; T.zR = -0.15; T.hp = 0.1; n.faceTo = Math.atan2(g.x - n.x, g.z - n.z); }
+    } else if (st === 'hoop' && n.arrived && !n.path) hoopPose(n, t);
+    else if (st === 'kick' && n.arrived && !n.path) kickPose(n, t);
+    else if (!moving && !scr) idlePose(n, t, dt);
+    else if (moving) {
+      if (n.prop === 1) { armsOut(-1.15, -1.15); T.hp = 0.12; }
+      else if (act !== 'recess') {                                  // hallway: a few kids wave when the player passes
+        var pdx = n.x - B.px, pdz = n.z - B.pz;
+        if (n.level === B.pl && pdx * pdx + pdz * pdz < 9 && t > n.waveCool) { n.waveCool = t + 14; if (hash(id, Math.floor(t / 9)) < 0.4) n.waveUntil = t + 1.6; }
+      }
+      if (n.act === 'recess' && n.rushing) T.ln = 0.12;
+      T.hy = 0.25 * Math.sin(t * 0.9 + id * 1.7);
+    }
+    if (n.prop === 1 && sit) { T.ln = Math.max(T.ln, 0.06); }
+    if (t < n.waveUntil && n.prop !== 1) {
+      T.aR = -2.75; T.wR = 1; T.zR = -0.35 + Math.sin(t * 11) * 0.45; T.hy = clamp(0.6 * toward(n, B.px, B.pz), -0.9, 0.9);
+    }
+  }
+
+  // ---- lessons: watch the board / teacher, write, glance at a neighbour, sway, put a hand up now and then
+  function classPose(n, t) {
+    var id = n.id, cyc = (t + id * 3.7) % 16, rt = (t + id * 1.7) % 20, rk = Math.floor((t + id * 1.7) / 20);
+    var dur = 2 + (id % 3), rs = 1 + ((id * 7) % 13) * 1.2;           // a 2-4 s hand-raise window somewhere in each 20 s cycle
+    var tc = n.cls.teacher, ty = toward(n, tc.x, tc.z), raising = rt > rs && rt < rs + dur && hash(id, rk) < 0.78;
+    n.raise = raising ? 1 : 0;
+    if (raising) { T.aR = -2.9; T.wR = 1; T.zR = -0.1 + Math.sin(t * 2.2 + id) * 0.08; T.hy = clamp(ty, -1, 1) * 0.8; T.hp = -0.08; }
+    else if (cyc < 3.5 || cyc > 12.5) { T.hy = clamp(ty, -1.0, 1.0) * 0.85; T.hp = -0.04; }
+    else if (cyc < 9.5) {                                           // writing
+      T.hp = 0.5; T.ln = 0.12; T.hy = 0.12 * Math.sin(t * 0.7 + id);
+      T.aR = -0.95 + 0.07 * Math.sin(t * 9 + id); T.wR = 1; T.zR = -0.1 + 0.08 * Math.sin(t * 5.3 + id * 2); T.aL = -0.7; T.wL = 1;
+    } else { T.hy = ((id & 1) ? 0.7 : -0.7) * Math.sin((cyc - 9.5) / 3 * PI); T.hp = 0.05; }
+    T.sx = 0.012 * Math.sin(t * 0.6 + id); T.ln += 0.02 * Math.sin(t * 0.8 + id * 1.3);
+  }
+
+  // ---- the specials rooms
+  function specialPose(n, t, sit) {
+    var id = n.id, r = n.spRoom, cc;
+    if (r === 'gym') {
+      var ph = Math.floor((clock.now % 120) / 40);
+      if (ph === 0 && n.peOn === 1) { T.ln = 0.12; }
+      else if (ph === 1) {                                          // jumping jacks
+        cc = (t * 2.2 + (id % 3) * 0.02) % 1; var up = 0.5 - 0.5 * Math.cos(cc * 2 * PI);
+        T.zL = 0.2 + 2.55 * up; T.zR = -T.zL; T.wL = T.wR = 1; T.aL = T.aR = 0; T.jy = 0.18 * Math.sin(cc * PI * 2 > 0 ? Math.abs(Math.sin(cc * PI)) : 0); T.lL = T.lR = up * 0.15;
+      } else if (ph === 2 && n.ballMate) {                           // pass the ball to the partner
+        T.hy = toward(n, n.ballMate.x, n.ballMate.z) * 0.9; n.faceTo = Math.atan2(n.ballMate.x - n.x, n.ballMate.z - n.z);
+        var u = n.ballU || 0, catching = n.ballTo ? u : 1 - u, throwing = n.ballTo ? 1 - u : u;
+        T.aL = T.aR = -1.2 - 0.6 * (catching > 0.7 ? 1 : 0) - (throwing < 0.15 ? 0.5 : 0); T.wL = T.wR = 1; T.zL = 0.15; T.zR = -0.15; T.hp = -0.1;
+      } else { T.sx = 0.02 * Math.sin(t * 0.9 + id); }
+    } else if (r === 'music') {                                     // sway together, singing up at the teacher
+      T.sx = 0.06 * Math.sin(t * 2.1 + id * 0.15); T.ln = 0.03 * Math.sin(t * 2.1 + id * 0.15); T.hp = -0.18; T.hy = 0.05 * Math.sin(t * 2.1);
+      T.zL = 0.12 + 0.06 * Math.sin(t * 2.1); T.zR = -T.zL;
+    } else if (r === 'library') {                                   // reading: head down, a page turn every so often
+      T.hp = 0.5; T.ln = 0.1; cc = (t + id * 2.9) % 9; var pt = cc < 1.2 ? Math.sin(cc / 1.2 * PI) : 0;
+      T.aL = -0.8; T.wL = 1; T.aR = -0.8 - 0.5 * pt; T.wR = 1; T.zR = -0.2 * pt; T.hy = 0.1 * Math.sin(t * 0.3 + id);
+    } else if (r === 'art') {                                       // drawing: the right hand moves in small strokes, head down
+      T.hp = 0.45; T.ln = 0.14; T.aR = -1.0 + 0.12 * Math.sin(t * 6 + id); T.wR = 1; T.zR = -0.1 + 0.18 * Math.sin(t * 3.4 + id * 1.3); T.aL = -0.8; T.wL = 1; T.hy = 0.15 * Math.sin(t * 0.4 + id);
+    } else if (r === 'computer') {                                  // typing
+      T.hp = 0.12; T.aL = -1.0 + 0.1 * Math.sin(t * 11 + id); T.aR = -1.0 + 0.1 * Math.sin(t * 9.3 + id); T.wL = T.wR = 1; T.ln = 0.05; T.hy = 0.05 * Math.sin(t * 0.5 + id);
+    } else {                                                        // stem: building something with both hands
+      T.hp = 0.4; T.ln = 0.12; T.aL = -1.1 + 0.2 * Math.sin(t * 4 + id); T.aR = -1.1 + 0.2 * Math.sin(t * 5.1 + id); T.wL = T.wR = 1; T.hy = 0.25 * Math.sin(t * 0.6 + id);
+    }
+  }
+
+  // basketball: the holder dribbles with the right hand, then shoots; the others watch and get ready for the pass
+  function hoopPose(n, t) {
+    var g = n.stO, b = g.ball, holder = b.holder === n, r = g.rim;
+    if (holder && b.st === 'hold') {
+      var by = n.dribY || 0.5; T.aR = -0.3 - 0.9 * clamp((by - 0.14) / 0.72, 0, 1); T.wR = 1; T.ln = 0.18; T.hp = 0.25; T.aL = -0.5; T.wL = 1; T.lL = 0.1;
+      n.faceTo = toward(n, r.x, r.z) + n.h;
+    } else if (holder && b.st === 'shot') {
+      var u = Math.min(1, b.t / 1.25); T.aL = T.aR = -2.8 + (u > 0.2 ? 0.5 : 0); T.wL = T.wR = 1; T.hp = -0.3; T.ln = -0.1 - 0.12 * (u < 0.3 ? 1 : 0); T.jy = u < 0.35 ? 0.3 * Math.sin(u / 0.35 * PI) : 0; T.zL = 0.2; T.zR = -0.2;
+    } else {
+      T.hp = -0.05; T.hy = clamp(toward(n, b.x, b.z), -1, 1) * 0.9; T.ln = 0.08;
+      var ready = b.st === 'pass' && b.to === n; T.aL = T.aR = ready ? -1.5 : -0.6; T.wL = T.wR = ready ? 1 : 0.7; T.zL = ready ? 0.3 : 0.1; T.zR = -T.zL;
+      n.faceTo = Math.atan2(b.x - n.x, b.z - n.z);
+    }
+  }
+  function kickPose(n, t) {
+    var g = n.stO, b = g.ball;
+    if (b.holder === n && n.kickT !== undefined && b.st === 'kick') {                // swing the kicking leg
+      var k = n.kickT; T.lR = -1.1 * Math.sin(Math.max(0, Math.min(1, k)) * PI * 0.8) - 0.25 * (k > 0.9 ? 1 : 0); T.ln = -0.05; armsOut(0.5, -0.6); T.zL = 0.5; T.zR = -0.5;
+    } else {
+      T.hy = clamp(toward(n, b.x, b.z), -1.1, 1.1); T.hp = 0.15; T.ln = 0.1; T.sx = 0.02 * Math.sin(t * 1.3 + n.id);
+      if (b.holder !== n && b.st === 'kick') { T.zL = 0.5; T.zR = -0.5; T.wL = T.wR = 1; T.aL = T.aR = -0.15; }
+      if (b.holder !== n) n.faceTo = Math.atan2(b.x - n.x, b.z - n.z);
+    }
+  }
+
+  // standing around: shift weight, look about, turn to chat with whoever is next to us
+  function idlePose(n, t, dt) {
+    var id = n.id;
+    if (!n.mateT || t > n.mateT) {
+      n.mateT = t + 2.5 + hash(id, Math.floor(t)) * 3;
+      if (n.mate && (n.mate.hidden || n.mate.moving || n.mate.path || Math.hypot(n.mate.x - n.x, n.mate.z - n.z) > 2.6)) n.mate = null;
+      if (!n.mate && n.act !== 'class' && !n.scr) { var m = findMate(n); if (m) { n.mate = m; if (!m.mate) m.mate = n; } }
+    }
+    var m2 = n.mate;
+    T.sx = 0.022 * Math.sin(t * 0.55 + id * 1.9); T.ln = 0.02 * Math.sin(t * 0.7 + id);
+    if (m2) {
+      n.faceTo = Math.atan2(m2.x - n.x, m2.z - n.z);
+      var turn = (id < m2.id) ? 0 : 1, sp = Math.sin(t * 0.9 + (turn ? PI : 0)) > 0;      // taking turns to talk
+      T.hy = clamp(toward(n, m2.x, m2.z), -0.8, 0.8) * 0.5; T.hp = sp ? 0.04 + 0.08 * Math.sin(t * 5 + id) : 0.02;
+      if (sp) { T.aR = -0.8 + 0.45 * Math.sin(t * 3.3 + id); T.wR = 1; T.zR = -0.3; if (Math.sin(t * 0.37 + id) > 0.3) { T.aL = -0.7 + 0.4 * Math.sin(t * 2.9); T.wL = 1; T.zL = 0.3; } }
+    } else {
+      T.hy = 0.75 * Math.sin(t * 0.45 + id * 1.7) * Math.sin(t * 0.13 + id * 0.7); T.hp = 0.05 * Math.sin(t * 0.31 + id);
+    }
+  }
+
+  function staffPose(n, t, dt) {
+    var id = n.id, moving = n.moving;
+    if (n.role === 'Teacher' && n.cls && !moving && n.ctx === 'home' && n.cls.students[0].act === 'class' && inOwnRoom(n)) {
+      var cyc = (t + id * 5.1) % 17, cdir = n.cls.room ? classDir(n) : 0;
+      if (cyc < 6) {                                                 // facing the class, talking with the hands
+        n.faceTo = cdir + PI; T.aR = -1.2 + 0.4 * Math.sin(t * 2.6); T.wR = 1; T.zR = -0.3; T.hy = 0.3 * Math.sin(t * 0.8);
+        if (Math.sin(t * 0.5 + id) > 0.2) { T.aL = -0.9 + 0.3 * Math.sin(t * 2.2); T.wL = 1; T.zL = 0.35; }
+      } else if (cyc < 11) {                                         // turned to the board, pointing and writing
+        n.faceTo = cdir; T.aR = -1.9 + 0.12 * Math.sin(t * 3.1); T.wR = 1; T.zR = -0.15; T.hp = -0.1;
+      } else {                                                       // open hands to the class
+        n.faceTo = cdir + PI; T.aL = T.aR = -0.8 + 0.2 * Math.sin(t * 2); T.wL = T.wR = 1; T.zL = 0.55; T.zR = -0.55; T.hp = -0.03;
+      }
+      T.sx = 0.01 * Math.sin(t * 0.5 + id);
+    } else if (!moving) {
+      if (n.role === 'Cafeteria Helper' && n.act !== undefined && t > 0) { var sc = (t + id) % 3.2; if (sc < 1.4) { T.aR = -0.9 + 0.55 * Math.sin(sc / 1.4 * PI); T.wR = 1; T.hp = 0.2; } }
+      T.sx = 0.02 * Math.sin(t * 0.5 + id); T.hy = 0.6 * Math.sin(t * 0.35 + id * 1.3) * Math.sin(t * 0.11 + id);
+    }
+  }
+  function classDir(n) { return L.classLayouts[n.cls.id].heading; }     // the direction of the room's whiteboard
+  function inOwnRoom(n) { var cl = n.cls, r = cl.room; return r && n.x > r.x0 - 0.3 && n.x < r.x1 + 0.3 && n.z > r.z0 - 0.3 && n.z < r.z1 + 0.3; }
 })();
 
 </script>
@@ -5468,13 +6423,14 @@ window.CAMPUS.site = {
     return cv;
   }
 
+  var dotScale = 8 / Math.max(8, (S.config && S.config.studentsPerClass) || 8) + 0.55;      // 1.55 with 8 per class, ~1.0 with 18 (dots shrink as the crowd grows)
   function drawMap(player, npcs) {
     var cv = el.mapCanvas, w = cv.width, h = cv.height, c = el.ctx, lvl = (player.inside && player.level) ? 1 : 0, key = w + 'x' + h + H.big + lvl;
     if (!mapStatic || mapKey !== key) { mapStatic = drawStatic(w, h, H.big, lvl); mapLabels = H.big ? drawLabels(w, h, lvl) : null; mapKey = key; }
     c.drawImage(mapStatic, 0, 0);
     var me = S.people.player(), ps = getPanels(w, h, H.big, lvl);
     for (var k = 0; k < ps.length; k++) {
-      var p = ps[k], r = Math.max(1.5, (p.zoom ? 1.6 : 1) * w / (H.big ? 420 : 110));
+      var p = ps[k], r = Math.max(1.1, (p.zoom ? 1.3 : 0.72) * w / (H.big ? 420 : 110) * dotScale);   // smaller dots now that there are twice as many people
       for (var i = 0; i < npcs.length; i++) {
         var n = npcs[i]; if (n.hidden || n === me || n.level !== p.level) continue;
         c.fillStyle = n.kind === 'staff' ? '#2D5BD6' : '#F2A60C';
@@ -5565,6 +6521,7 @@ window.CAMPUS_AUDIO_DATA = {"classroom": "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLj
   'use strict';
   var S = window.CAMPUS = window.CAMPUS || {}, L = S.layout;
   var A = S.audio = { ok: false, muted: false, crowdLevel: 0, activeVoices: 0, ambience: 'out', bells: 0, decoded: 0, spoken: 0 };
+  var CROWD_DIV = 3.5 * (((S.config && S.config.studentsPerClass) || 8) / 8);
   var MASTER = 0.8, NAMES = ['classroom', 'kids', 'cafeteria'], XFADE = 1.5, MIN_LEVEL = 0.03;
   var ctx = null, master, limiter, analyser, peakBuf, crowdBus, sfxBus, ambBus;
   var crowdPan, crowdHS, crowdLP, layers = {}, fallback = null, loadDone = false;
@@ -5777,7 +6734,7 @@ window.CAMPUS_AUDIO_DATA = {"classroom": "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLj
       sum += w; if (same) sumSame += w; if (act <= 0.12) sumQuiet += w;
       cdx += w * dx; cdz += w * dz;
     }
-    var lvl = A.crowdLevel = 1 - Math.exp(-sum / 3.5), t = ctx.currentTime;
+    var lvl = A.crowdLevel = 1 - Math.exp(-sum / CROWD_DIV), t = ctx.currentTime;   // CROWD_DIV: more children per class, same loudness per place
     var sameFrac = sum > 1e-6 ? sumSame / sum : 1, lesson = sum > 1e-6 ? sumQuiet / sum : 0;
     var out = !Pl.inside;
     // ---- recorded layers
@@ -6098,7 +7055,7 @@ window.CAMPUS_AUDIO_DATA = {"classroom": "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLj
     // advance only the simulation (no rendering) - used by tests
     simulate: function (seconds, dt, cb) {
       dt = dt || 0.1; var fakeCam = { position: new THREE.Vector3(0, 0, 0) };
-      for (var t = 0; t < seconds; t += dt) { P.update(dt, fakeCam, Pl.x, Pl.z, Pl.level); if (cb) cb(t); }
+      for (var t = 0; t < seconds; t += dt) { S.world.update(dt, fakeCam, null); P.update(dt, fakeCam, Pl.x, Pl.z, Pl.level); if (cb) cb(t); }
     },
     npcs: function () { return P.list.filter(function (n) { return n !== P.player(); }); },
     renderInfo: function () { return { calls: info.calls, triangles: info.triangles }; },

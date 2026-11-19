@@ -32,6 +32,7 @@
     n.link = o.hubs || null; n.maxd = o.maxd || 9; n.k = o.k || 2; n.rec = key.indexOf('rec:') === 0;
     // seated characters sit a little behind the chair centre so their knees clear the desk
     if (n.sit && n.h != null) { n.x -= Math.sin(n.h) * 0.12; n.z -= Math.cos(n.h) * 0.12; }
+    n.key = key;
     (nav.spots[key] = nav.spots[key] || []).push(n);
     return n;
   }
@@ -89,33 +90,30 @@
     LV = 0;
 
     // ------------------------------------------------- band rooms (desks)
+    // Desk rooms: a corridor of hubs runs behind each row of chairs (every chair has a hub straight behind it), the centre aisle
+    // joins the corridors to the door and to the front of the room.  These hubs only link inside their own room (and to the door hub).
     L.bandRooms.forEach(function (r) {
       var c = r.cl, id = r.id; LV = r.level;
       hub(id + ':door', c.door.x, c.door.z);
-      var depths = [c.chairD[0], c.chairD[1], 7.5];
-      depths.forEach(function (d, di) {
-        c.aisleO.forEach(function (o, oi) { var p = c.W(d, o); hub(id + ':a' + di + '_' + oi, p.x, p.z); });
-      });
       if (r.desks) {
-        // student chairs
-        c.desks.forEach(function (d, di) {
-          var oi = d.ci, nb = oi === 0 ? [0] : oi === 1 ? [0, 1] : oi === 2 ? [1, 2] : [2];
-          spot('seat:' + id, d.cx, d.cz, { h: c.heading, sit: true, k: 2,
-            hubs: nb.map(function (q) { return id + ':a' + d.ri + '_' + q; }) });
+        c.cd.forEach(function (d, di) { c.OS.forEach(function (o, k) { var p = c.W(d, o), h = hub(id + ':r' + di + '_' + k, p.x, p.z); h.rm = id; }); });
+        [-1.7, 0, 1.5].forEach(function (o, k) { var p = c.W(8.1, o), h = hub(id + ':f' + k, p.x, p.z); h.rm = id; });
+        c.desks.forEach(function (d) {              // student chairs
+          spot('seat:' + id, d.cx, d.cz, { h: c.heading, sit: true, k: 2, hubs: [id + ':r' + d.ri + '_' + c.OS.indexOf(c.colO[d.ci])] });
         });
-        // standing spots for specials (aisle positions)
-        [0, 1, 2].forEach(function (di) { [0, 1, 2].forEach(function (oi) {
-          var p = c.W(depths[di] + 0.0, c.aisleO[oi] + (oi === 0 ? -0.0 : 0));
-          spot('floor:' + id, p.x, p.z, { h: c.heading, hubs: [id + ':a' + di + '_' + oi] });
+        // standing spots in the corridors (aisle spots for specials and for teachers walking an aisle)
+        [0, 1, 2].forEach(function (di) { [1, 3, 5].forEach(function (k) {
+          var p = c.W(c.cd[di] + 0.0, c.OS[k]);
+          spot('floor:' + id, p.x, p.z, { h: c.heading, hubs: [id + ':r' + di + '_' + k] });
         }); });
       }
       // teacher / staff strolling spots
-      var ts = [c.W(8.5, -2.4), c.W(8.5, 1.4), c.W(7.2, 3.2), c.W(4.1, -0.0)];
+      var ts = [c.W(8.6, -1.4), c.W(8.6, 0.6), c.W(8.1, 1.6)];
       if (!r.desks) ts = [c.W(5.5, -1.5), c.W(7.5, 1.8), c.W(3.5, 2)];
       if (id === 'lounge') ts = [];
       ts.forEach(function (p, q) {
         spot('stroll:' + id, p.x, p.z, { h: q === 0 ? c.heading : null, maxd: 7,
-          hubs: r.desks ? [[id + ':a2_0', id + ':a2_1'], [id + ':a2_1', id + ':a2_2'], [id + ':a2_2'], [id + ':a1_1']][q] : null });
+          hubs: r.desks ? [[id + ':f0', id + ':f1'], [id + ':f1', id + ':f2'], [id + ':f2']][q] : null });
       });
       if (!r.desks) { hub(id + ':mid', c.W(5, 0).x, c.W(5, 0).z); }
     });
@@ -131,24 +129,28 @@
 
     // -------------------------------------------------------- cafeteria
     hub('cafeIn', -6, 13.9);
-    var cx = [-10.5, -6, -1.5], zk = [], kk;
+    var cx = [-11, -6.8, -1.5], zk = [], kk;
     for (kk = 0; kk < 6; kk++) zk.push(13.9 + 4.2 * kk);
     zk.forEach(function (z, ki) {
-      cx.forEach(function (x, xi) { if (!(ki === 0 && xi === 1)) hub('cf' + ki + '_' + xi, x, z); });
-      hub('cfe' + ki, 2.4, z);
+      cx.forEach(function (x, xi) { hub('cf' + ki + '_' + xi, x, z); });
+      hub('cfe' + ki, 2.4, z).strip = true;
     });
-    byName['cf0_1'] = byName['cafeIn'];
     L.F.cafeTables.forEach(function (t, ti) {
       var row = Math.round((t.z - 16) / 4.2), xi = t.x < -6 ? 0 : 2;
       [-1, 1].forEach(function (side) {
-        for (var s = -2; s <= 2; s++) {
-          var kz = side < 0 ? row : row + 1, hubs = [xi, xi === 0 ? 1 : 1].map(function (q, qi) { return 'cf' + kz + '_' + (qi === 0 ? xi : 1); });
+        for (var s6 = 0; s6 < 6; s6++) {
+          var s = (s6 - 2.5) * 1.05 / 1.3, kz = side < 0 ? row : row + 1, hubs = [xi, xi === 0 ? 1 : 1].map(function (q, qi) { return 'cf' + kz + '_' + (qi === 0 ? xi : 1); });
           spot('lunch', t.x + s * 1.3, t.z + side * 1.0, { sit: true, h: side < 0 ? 0 : Math.PI, hubs: hubs, k: 2 });
         }
       });
     });
-    [17.5, 21.5, 25].forEach(function (z) { spot('stroll:counter', 2.3, z, { h: Math.PI / 2, hubs: ['cfe' + (z < 19 ? 1 : z < 23 ? 2 : 3)] }); });
+    spot('stroll:counter', 1.9, 14.6, { h: Math.PI / 2, hubs: ['cfe0'] }); spot('stroll:counter', 1.3, 28.4, { h: Math.PI / 2, hubs: ['cfe3', 'cfe4'] });
+    spot('stroll:counter', 1.9, 35.2, { h: Math.PI / 2, hubs: ['cfe5'] });
+    // serving line: 26 slots along the counter wall (hubs, so people can walk from slot to slot); slot 0 is the head
+    nav.queue = [];
+    for (i = 0; i < 26; i++) { var qh = hub('q' + i, 2.45, 15.9 + 0.7 * i); qh.strip = true; qh.qi = i; nav.queue.push(qh); }
     spot('stroll:cafe', -6, 21, {}); spot('stroll:cafe', -6, 30, {});
+    [[-14.8, 14.2], [-1, 13.6], [-15, 36.2], [-1.5, 36.4], [-9.5, 36.4]].forEach(function (p) { spot('stroll:cafe', p[0], p[1], {}); });
 
     // ----------------------------------------------------------- library
     hub('libIn', 31, 13.8);
@@ -215,6 +217,58 @@
     [[24, -8], [50, -8], [38, -16], [30, 2], [46, 2]].forEach(function (p) { spot('rec:yard', p[0], p[1], { maxd: 20 }); });   // courtyard
     [[-20, -34], [-6, -34], [-34, -34], [14, -34], [27, -34]].forEach(function (p) { spot('rec:yard', p[0], p[1], { maxd: 14 }); });
     [[-48, -46], [-48, -44]].forEach(function (p) { spot('rec:pavilion', p[0], p[1], { maxd: 14 }); });
+    // recess activity stations (see behavior.js).  All coordinates were chosen clear of the equipment.
+    var A = nav.act = { swing: [], bench: [], arenas: [], hoops: [], kicks: [], hops: [], patrol: {} };
+    L.play.swingSets.forEach(function (sw) { sw.seats.forEach(function (dx) { A.swing.push(spot('act:swing', sw.x + dx, sw.z - 1.35, { maxd: 60, h: 0 })); }); });
+    var tw = L.play.tower;
+    A.slideFoot = spot('act:slide', tw.x, tw.z - 2.5, { maxd: 60, h: 0 }); A.slideOut = spot('act:slideout', tw.x + 5.2, tw.z, { maxd: 60, h: Math.PI / 2 });
+    L.play.benches.forEach(function (b, bi) {          // two sitters per bench, turned a little towards each other
+      var fx = Math.sin(b.rot), fz = Math.cos(b.rot), rx = Math.cos(b.rot), rz = -Math.sin(b.rot);   // facing / along-bench directions
+      [-0.5, 0.5].forEach(function (o, k) {
+        var h = b.rot + (k ? -0.85 : 0.85);
+        var sp = spot('act:bench', b.x + rx * o - fx * 0.0, b.z + rz * o, { sit: true, y: 0.12, h: h, maxd: 60 });
+        sp.bench = bi; sp.mate = null; A.bench.push(sp);
+      });
+    });
+    for (i = 0; i < A.bench.length; i += 2) { A.bench[i].mate = A.bench[i + 1]; A.bench[i + 1].mate = A.bench[i]; }
+    // tag arenas (entry spot in the middle; rectangles are roamed freely by the chase script)
+    [{ id: 'playground', x0: -27, z0: -57, x1: -18.5, z1: -45 }, { id: 'field', x0: -108, z0: -28, x1: -96, z1: -16 }, { id: 'court', x0: 30.5, z0: -56, x1: 39.5, z1: -46 }].forEach(function (a) {
+      a.cx = (a.x0 + a.x1) / 2; a.cz = (a.z0 + a.z1) / 2; a.zone = a.id; a.spot = spot('act:tag', a.cx, a.cz, { maxd: 60 }); A.arenas.push(a);
+    });
+    // basketball: four players around each hoop; the ball goes between them
+    L.courtHoops.forEach(function (hp, hi) {
+      var d = hp.dir, g = { hoop: hp, rim: { x: hp.x + d * 0.45, y: 2.9, z: hp.z }, spots: [] };
+      [[4.2, -2.6], [4.2, 2.6], [6.4, 0.0], [2.6, 0.0]].forEach(function (o) { g.spots.push(spot('act:hoop', hp.x + d * o[0], hp.z + o[1], { maxd: 40, h: d > 0 ? -Math.PI / 2 : Math.PI / 2 })); });
+      A.hoops.push(g);
+    });
+    // kickball circles on the field (five players, ball passed around)
+    [[-76, -46], [-100, -50], [-78, -14]].forEach(function (c) {
+      var g = { x: c[0], z: c[1], spots: [] };
+      for (var q = 0; q < 5; q++) { var an = q * 1.2566 + 0.3; g.spots.push(spot('act:kick', c[0] + Math.sin(an) * 3.4, c[1] + Math.cos(an) * 3.4, { maxd: 60, h: an + Math.PI })); }
+      A.kicks.push(g);
+    });
+    // jump rope: the jumper in the middle, two turners either side
+    [{ x: -7, z: -46.5, zone: 'playground' }, { x: -86, z: -30, zone: 'field' }, { x: 35, z: -49, zone: 'court', skip: true }].forEach(function (c) {
+      if (c.skip) return;
+      var g = { zone: c.zone, x: c.x, z: c.z, spots: [spot('act:hop', c.x, c.z, { maxd: 60, h: 0 }), spot('act:hop', c.x - 1.9, c.z, { maxd: 60, h: Math.PI / 2 }), spot('act:hop', c.x + 1.9, c.z, { maxd: 60, h: -Math.PI / 2 })] };
+      A.hops.push(g);
+    });
+    // no plain recess spot within 1.4 m of a game station (keeps the idle kids off the players)
+    var stn = [A.slideFoot, A.slideOut].concat(A.swing, A.bench, A.arenas.map(function (q) { return q.spot; }));
+    A.hoops.forEach(function (g) { stn = stn.concat(g.spots); }); A.kicks.forEach(function (g) { stn = stn.concat(g.spots); }); A.hops.forEach(function (g) { stn = stn.concat(g.spots); });
+    ['rec:playground', 'rec:field', 'rec:court'].forEach(function (k) {
+      nav.spots[k] = nav.spots[k].filter(function (q) { return !stn.some(function (t) { return Math.hypot(t.x - q.x, t.z - q.z) < 1.4; }); });
+    });
+    // dismissal posts along the front lawn (enough for every supervising teacher, coach and the principals) and the places teachers wait in the cafeteria
+    for (i = 0; i < 24; i++) spot('post:front', -6 + (i % 12) * 2.8, i < 12 ? 52.6 : 54.8, { maxd: 14 });
+    for (i = 0; i < 10; i++) {
+      var ez = 24.5 + i * 1.2, kn = Math.max(0, Math.min(4, Math.round((ez - 13.9) / 4.2 - 0.5)));
+      spot('escort:cafe', -6.8, ez, { maxd: 9, hubs: ['cf' + kn + '_1', 'cf' + (kn + 1) + '_1'] });
+    }
+    // teachers on duty walk the edge of their yard
+    A.patrol.playground = [[-27, -43], [7, -44], [7, -68.5], [-27, -68.5]].map(function (p) { return spot('patrol:playground', p[0], p[1], { maxd: 60 }); });
+    A.patrol.field = [[-66, -8], [-66, -66], [-112, -66], [-112, -8]].map(function (p) { return spot('patrol:field', p[0], p[1], { maxd: 60 }); });
+    A.patrol.court = [[24, -44], [46, -44], [46, -58.5], [24, -58.5]].map(function (p) { return spot('patrol:court', p[0], p[1], { maxd: 60 }); });
     // supervisor posts
     spot('post:playground', -10, -42, { maxd: 22 }); spot('post:field', -62, -30, { maxd: 30 }); spot('post:court', 34, -44, { maxd: 14 });
     spot('post:front', 4, 54, { maxd: 14 }); spot('post:front', 14, 54, { maxd: 14 }); spot('post:front', 3, 43, { maxd: 14 });
@@ -225,6 +279,12 @@
     for (i = 0; i < hubs.length; i++) for (j = i + 1; j < hubs.length; j++) {
       var a = hubs[i], b = hubs[j], d = Math.hypot(a.x - b.x, a.z - b.z);
       if (d > 62 || a.level !== b.level) continue;
+      if (a.strip || b.strip) {                           // the serving line and the counter-side hubs are never a through route: they only link sideways to the aisles (and to each other along the line)
+        var sa = a.strip, sb = b.strip, other = sa ? b : a;
+        if (sa && sb) { if (!(a.qi !== undefined && b.qi !== undefined && Math.abs(a.qi - b.qi) === 1)) continue; }
+        else if (!(/^cf\d_2$/.test(other.name) && d <= 7)) continue;
+      }
+      if ((a.rm || b.rm) && a.rm !== b.rm && !(a.rm && b.name === a.rm + ':door') && !(b.rm && a.name === b.rm + ':door')) continue;   // classroom corridor hubs stay in their room
       if (L.segBlocked(a.x, a.z, b.x, b.z, 0.45, 0.25, a.level)) continue;
       link(a, b, d);
     }
@@ -246,33 +306,74 @@
       cand.sort(function (p, q) { return p.d - q.d; });
       cand.slice(0, lf.k || 2).forEach(function (c) { link(lf, c.h, c.d); });
     });
+    // direct links between the slide's foot and its exit (leaves are never stepping stones, but a route may start or end on one)
+    (function () { var a = nav.act.slideFoot, b = nav.act.slideOut; var d = Math.hypot(a.x - b.x, a.z - b.z); a.adj.push({ j: b.i, d: d }); b.adj.push({ j: a.i, d: d }); })();
+    [byName.stWg, byName.stWu, byName.stEg, byName.stEu].forEach(function (h) { if (h) h.lane = true; });      // walkers use two lanes on the flights
     nav.built = true;
   }
 
   // ------------------------------------------------------------ A* routing
-  var cache = {};
-  nav.route = function (a, b) {
-    if (a === b) return [a];
-    var key = a + '>' + b; if (cache[key]) return cache[key].slice();
-    var N = nodes, g = {}, came = {}, closed = {}, heap = [], tx = N[b].x, tz = N[b].z;
+  // Routing.  A* runs between hubs only (typed arrays + a visit stamp, nothing allocated per node); a route between two spots is
+  // assembled from the best of the (at most 2 x 2) hub routes at their ends, so that the hub-to-hub results are shared by everybody
+  // walking the same corridors.  Spots linked straight to other spots (slide foot / exit) fall back to a plain A*.
+  var cache = {}, hubCache = {}, AN = 0, gS = null, cameS = null, seenS = null, closedS = null, stampS = 0, lastCost = 0;
+  function astar(a, b) {
+    var N = nodes, n = N.length, heap = [], tx = N[b].x, tz = N[b].z;
+    if (AN !== n) { AN = n; gS = new Float64Array(n); cameS = new Int32Array(n); seenS = new Int32Array(n); closedS = new Int32Array(n); stampS = 0; }
+    stampS++;
     function push(i, f) { heap.push([f, i]); var c = heap.length - 1; while (c > 0) { var p = (c - 1) >> 1; if (heap[p][0] <= heap[c][0]) break; var t = heap[p]; heap[p] = heap[c]; heap[c] = t; c = p; } }
     function pop() { var top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; var c = 0; for (;;) { var l = 2 * c + 1, r = l + 1, m = c; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === c) break; var t = heap[m]; heap[m] = heap[c]; heap[c] = t; c = m; } } return top; }
-    g[a] = 0; push(a, 0);
+    gS[a] = 0; seenS[a] = stampS; push(a, 0);
     while (heap.length) {
       var cur = pop()[1];
-      if (cur === b) { var path = [b]; while (path[0] !== a) path.unshift(came[path[0]]); cache[key] = path; return path.slice(); }
-      if (closed[cur]) continue; closed[cur] = true;
+      if (cur === b) { var path = [b]; while (path[0] !== a) path.unshift(cameS[path[0]]); lastCost = gS[b]; return path; }
+      if (closedS[cur] === stampS) continue; closedS[cur] = stampS;
       if (N[cur].leaf && cur !== a) continue;       // leaves are never stepping stones
       var adj = N[cur].adj;
       for (var q = 0; q < adj.length; q++) {
-        var e = adj[q], ng = g[cur] + e.d;
-        if (g[e.j] === undefined || ng < g[e.j]) {
-          g[e.j] = ng; came[e.j] = cur;
+        var e = adj[q];
+        if (N[e.j].leaf && e.j !== b) continue;                          // (a leaf is only ever the end of a route)
+        var ng = gS[cur] + e.d;
+        if (seenS[e.j] !== stampS || ng < gS[e.j]) {
+          gS[e.j] = ng; cameS[e.j] = cur; seenS[e.j] = stampS;
           push(e.j, ng + Math.hypot(N[e.j].x - tx, N[e.j].z - tz));
         }
       }
     }
     return null;
+  }
+  function hubRoute(a, b) {
+    var key = a * 4096 + b, r = hubCache[key];
+    if (r === undefined) { var p = astar(a, b); r = hubCache[key] = p ? { path: p, cost: lastCost } : null; }
+    return r;
+  }
+  nav.route = function (a, b) {
+    if (a === b) return [a];
+    var key = a * 4096 + b, c = cache[key]; if (c) return c.slice();
+    var A = nodes[a], Bn = nodes[b], so = A.leaf ? A.adj : null, eo = Bn.leaf ? Bn.adj : null, i, j, direct = false;
+    if (so) for (i = 0; i < so.length; i++) if (nodes[so[i].j].leaf) direct = true;
+    if (eo) for (i = 0; i < eo.length; i++) if (nodes[eo[i].j].leaf) direct = true;
+    var path;
+    if (direct) path = astar(a, b);
+    else {
+      var sl = so ? so.length : 1, el = eo ? eo.length : 1, best = null, bestCost = 1e18, combos = [];
+      for (i = 0; i < sl; i++) for (j = 0; j < el; j++) {
+        var ha0 = so ? so[i].j : a, hb0 = eo ? eo[j].j : b, d0 = (so ? so[i].d : 0) + (eo ? eo[j].d : 0);
+        combos.push([d0 + Math.hypot(nodes[ha0].x - nodes[hb0].x, nodes[ha0].z - nodes[hb0].z), ha0, hb0, d0]);
+      }
+      combos.sort(function (p, q) { return p[0] - q[0]; });
+      for (i = 0; i < combos.length; i++) {              // cheapest lower bound first; stop when no combination can win any more
+        var cb = combos[i]; if (cb[0] >= bestCost) break;
+        var cost, hp;
+        if (cb[1] === cb[2]) { cost = cb[3]; hp = [cb[1]]; }
+        else { var hr = hubRoute(cb[1], cb[2]); if (!hr) continue; cost = cb[3] + hr.cost; hp = hr.path; }
+        if (cost < bestCost) { bestCost = cost; best = hp; }
+      }
+      if (!best) return null;
+      path = best.slice(); if (so) path.unshift(a); if (eo) path.push(b);
+    }
+    if (path) cache[key] = path;
+    return path ? path.slice() : null;
   };
 
   // nearest hub reachable (used when something must start from an arbitrary point)

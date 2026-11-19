@@ -15,6 +15,9 @@
   'use strict';
   var S = window.CAMPUS = window.CAMPUS || {};
   var site = S.site;
+  // students in every one of the 27 classes (desks, seats, schedule capacity all follow this single number)
+  var CONFIG = S.config = S.config || {};
+  if (!CONFIG.studentsPerClass) { var qm = /[?&]spc=(\d+)/.exec(window.location && window.location.search || ''); CONFIG.studentsPerClass = qm ? Math.max(4, Math.min(18, +qm[1])) : 18; }   // ?spc=12 for a smaller school (testing)
   var L = S.layout = {};
 
   // ---------------------------------------------------------------- constants
@@ -297,20 +300,23 @@
   // ------------------------------------------------------------- classrooms
   // Local frame of a band room: d = distance from the door wall into the room,
   // o = offset along Z from the room centre.  Desks face the whiteboard on the
-  // far wall; chairs sit on the door side of each desk.  Aisles run at o=-2,0,2.
+  // far wall; chairs sit on the door side of each desk.
   L.classLayout = function (r) {
     var sgn = r.doorSide === 'E' ? -1 : 1;
     var base = r.doorSide === 'E' ? r.x1 : r.x0;
     function W(d, o) { return { x: base + sgn * d, z: r.cz + o }; }
     var heading = sgn < 0 ? -Math.PI / 2 : Math.PI / 2;      // facing the far wall
-    var rowD = [3.6, 6.2], offs = [-3, -1, 1, 3], aisleO = [-2, 0, 2], chairD = [rowD[0] - 0.85, rowD[1] - 0.85];
-    var desks = [], i, j;
-    for (i = 0; i < 2; i++) for (j = 0; j < 4; j++) {
-      var dp = W(rowD[i], offs[j]), cp = W(chairD[i], offs[j]);
-      desks.push({ x: dp.x, z: dp.z, cx: cp.x, cz: cp.z, ri: i, ci: j, heading: heading, rot: sgn < 0 ? 1 : 0 });
+    // up to 18 desks: three rows of six (three pairs-of-three with a 1.1 m centre aisle); a corridor runs behind every row of chairs
+    var N = Math.min(18, CONFIG.studentsPerClass), colO = [-3.15, -2.05, -0.95, 0.95, 2.05, 3.15], rowD = [2.9, 5.1, 7.3];
+    var chairD = rowD.map(function (d) { return d - 0.85; }), cd = chairD.map(function (d) { return d - 0.6; });
+    var OS = [-3.15, -2.05, -0.95, 0, 0.95, 2.05, 3.15];     // offsets of the corridor hubs
+    var desks = [], i;
+    for (i = 0; i < N; i++) {
+      var ri = Math.floor(i / 6), ci = i % 6, dp = W(rowD[ri], colO[ci]), cp = W(chairD[ri], colO[ci]);
+      desks.push({ x: dp.x, z: dp.z, cx: cp.x, cz: cp.z, ri: ri, ci: ci, heading: heading, rot: sgn < 0 ? 1 : 0 });
     }
-    return { W: W, sgn: sgn, heading: heading, desks: desks, rowD: rowD, chairD: chairD, offs: offs, aisleO: aisleO,
-      door: W(1.1, 0), doorOut: W(-1.2, 0), front: W(8.4, 0), board: W(9.82, 0), teacherDesk: W(8.7, 3.2), rug: W(7.7, -1.2) };
+    return { W: W, sgn: sgn, heading: heading, desks: desks, rowD: rowD, chairD: chairD, cd: cd, colO: colO, OS: OS, n: N,
+      door: W(1.1, 0), doorOut: W(-1.2, 0), front: W(8.4, 0), board: W(9.82, 0), teacherDesk: W(8.7, 3.2), rug: W(8.65, -1.8) };
   };
   L.classLayouts = {};
   L.bandRooms.forEach(function (r) { r.cl = L.classLayouts[r.id] = L.classLayout(r); });
@@ -319,7 +325,7 @@
   var F = L.F = {};
   // cafeteria: long tables along X, benches either side; stage on the south wall
   F.cafeTables = [];
-  [-10.5, -1.5].forEach(function (cx) { [16, 20.2, 24.4, 28.6, 32.8].forEach(function (cz) { F.cafeTables.push({ x: cx, z: cz, len: 6.5 }); }); });
+  [-11, -2.6].forEach(function (cx) { [16, 20.2, 24.4, 28.6, 32.8].forEach(function (cz) { F.cafeTables.push({ x: cx, z: cz, len: 6.5 }); }); });
   F.cafeStage = { x0: -12, x1: -4, z0: 37.5, z1: 39.85, h: 0.6 };
   F.cafeCounter = { x0: 3.0, x1: 3.85, z0: 15, z1: 27 };
   // library
@@ -413,6 +419,8 @@
   L.play = {
     tower: { x: -22, z: -64 },          // slide tower 2.6 x 2.6, slide goes +X
     swings: { x: -4, z: -66, w: 7.2 },  // swing set frame along X
+    // swing sets: frame along X, seats hang from a bar at y=3.0 on 2.45 m chains (the first set has three seats, the two new ones two)
+    swingSets: [{ x: -4, z: -66, w: 7.2, seats: [-2.4, 0, 2.4] }, { x: -14, z: -60, w: 4.6, seats: [-1.2, 1.2] }, { x: -4.5, z: -57.5, w: 4.6, seats: [-1.2, 1.2] }],
     dome: { x: -13, z: -50, r: 2.2 },   // climbing dome
     riders: [{ x: 3, z: -48 }, { x: 5.5, z: -51.5 }, { x: 3, z: -55 }],
     benches: [{ x: -26, z: -41, rot: 0 }, { x: 1, z: -40.5, rot: 0 }, { x: 7.5, z: -62, rot: Math.PI / 2 }]
@@ -422,6 +430,10 @@
   L.addBox(P.tower.x + 1.4, P.tower.z - 0.6, P.tower.x + 4.4, P.tower.z + 0.6, false); // slide run (player only)
   L.addBox(P.swings.x - P.swings.w / 2 - 0.5, P.swings.z - 0.5, P.swings.x - P.swings.w / 2 + 0.5, P.swings.z + 0.5, true);
   L.addBox(P.swings.x + P.swings.w / 2 - 0.5, P.swings.z - 0.5, P.swings.x + P.swings.w / 2 + 0.5, P.swings.z + 0.5, true);
+  P.swingSets.slice(1).forEach(function (w) {              // the two new sets: posts are solid, the swing area is kept clear of the recess spots
+    [-1, 1].forEach(function (e) { L.addBox(w.x + e * w.w / 2 - 0.4, w.z - 0.5, w.x + e * w.w / 2 + 0.4, w.z + 0.5, true); });
+  });
+  P.swingSets.forEach(function (w) { L.addBox(w.x - w.w / 2, w.z - 2.0, w.x + w.w / 2, w.z + 2.0, false, { navBlock: true }); });
   L.addCircle(P.dome.x, P.dome.z, P.dome.r - 0.1, true);
   P.riders.forEach(function (p) { L.addCircle(p.x, p.z, 0.6, false); });
   P.benches.forEach(function (b) {
@@ -544,13 +556,33 @@
   // Push a circle (x,z,r) out of every box / circle / segment.  Returns the
   // module-level result object {x,z} (do not keep a reference).
   var res = { x: 0, z: 0 };
+  // Collider index: boxes / circles bucketed in 6 m cells (each inflated by 1.5 m), so a resolve only looks at its neighbourhood.
+  var GCELL = 6, GX0 = -170, GZ0 = -150, GW = 62, GH = 52, gBox = null, gCirc = null, gWall = null, gKey = -1, gOver = [];
+  function buildGrid() {
+    var n = GW * GH, i, k;
+    gBox = new Array(n); gCirc = new Array(n); gWall = new Array(n);
+    for (i = 0; i < n; i++) { gBox[i] = []; gCirc[i] = []; gWall[i] = []; }
+    function cellRange(x0, z0, x1, z1, fn) {
+      var cx0 = Math.floor((x0 - 1.5 - GX0) / GCELL), cx1 = Math.floor((x1 + 1.5 - GX0) / GCELL), cz0 = Math.floor((z0 - 1.5 - GZ0) / GCELL), cz1 = Math.floor((z1 + 1.5 - GZ0) / GCELL);
+      for (var cx = Math.max(0, cx0); cx <= Math.min(GW - 1, cx1); cx++) for (var cz = Math.max(0, cz0); cz <= Math.min(GH - 1, cz1); cz++) fn(cx * GH + cz);
+    }
+    boxes.forEach(function (b, bi) { cellRange(b.x0, b.z0, b.x1, b.z1, function (c) { gBox[c].push(bi); if (b.h) gWall[c].push(bi); }); });
+    circles.forEach(function (c, ci) { cellRange(c.x - c.r, c.z - c.r, c.x + c.r, c.z + c.r, function (cell) { gCirc[cell].push(ci); }); });
+    gKey = boxes.length * 100000 + circles.length;
+  }
+  var EMPTY = [];
+
   L.resolve = function (x, z, r, npcOnly, level) {
     level = level || 0;
-    var xi = x, zi = z, moved, i, pass;
+    if (gKey !== boxes.length * 100000 + circles.length) buildGrid();
+    var xi = x, zi = z, moved, i, pass, gi;
+    var gcx = Math.floor((x - GX0) / GCELL), gcz = Math.floor((z - GZ0) / GCELL), inGrid = gcx >= 0 && gcz >= 0 && gcx < GW && gcz < GH;
+    var lb = inGrid ? gBox[gcx * GH + gcz] : null, lc = inGrid ? gCirc[gcx * GH + gcz] : null, lw = inGrid ? gWall[gcx * GH + gcz] : null;
+    var nb = lb ? lb.length : boxes.length, nc = lc ? lc.length : circles.length, nw = lw ? lw.length : boxes.length;
     for (pass = 0; pass < 3; pass++) {
       moved = false;
-      for (i = 0; i < boxes.length; i++) {
-        var b = boxes[i];
+      for (gi = 0; gi < nb; gi++) {
+        var b = boxes[lb ? lb[gi] : gi];
         if (b.lv !== level || (npcOnly && !b.npc)) continue;
         if (x < b.x0 - r || x > b.x1 + r || z < b.z0 - r || z > b.z1 + r) continue;
         var cx = x < b.x0 ? b.x0 : (x > b.x1 ? b.x1 : x);
@@ -565,8 +597,8 @@
         }
         moved = true;
       }
-      for (i = 0; i < circles.length; i++) {
-        var c = circles[i];
+      for (gi = 0; gi < nc; gi++) {
+        var c = circles[lc ? lc[gi] : gi];
         if (c.lv !== level || (npcOnly && !c.npc)) continue;
         var ex = x - c.x, ez = z - c.z, rr2 = r + c.r, e2 = ex * ex + ez * ez;
         if (e2 >= rr2 * rr2) continue;
@@ -595,8 +627,8 @@
     // wall is put back on the side the move started from (xi, zi).
     for (pass = 0; pass < 4; pass++) {
       moved = false;
-      for (i = 0; i < boxes.length; i++) {
-        b = boxes[i];
+      for (gi = 0; gi < nw; gi++) {
+        b = boxes[lw ? lw[gi] : gi];
         if (!b.h || b.lv !== level) continue;
         if ((x < b.x0 - r && xi < b.x0 - r) || (x > b.x1 + r && xi > b.x1 + r) || (z < b.z0 - r && zi < b.z0 - r) || (z > b.z1 + r && zi > b.z1 + r)) continue;
         cx = x < b.x0 ? b.x0 : (x > b.x1 ? b.x1 : x); cz = z < b.z0 ? b.z0 : (z > b.z1 ? b.z1 : z);

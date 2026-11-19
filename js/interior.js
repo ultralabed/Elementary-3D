@@ -350,8 +350,8 @@
       if (r.desks) {
         // student desks + chairs
         c.desks.forEach(function (d) {
-          addDesk(d.x, d.z, 0, acc); addChair(d.cx, d.cz, c.heading, acc);
-          L.addBox(d.x - 0.4, d.z - 0.5, d.x + 0.4, d.z + 0.5, false, { navBlock: true });
+          addDesk(d.x, d.z, 0, acc, 0.95, 0.9); addChair(d.cx, d.cz, c.heading, acc);
+          L.addBox(d.x - 0.35, d.z - 0.4, d.x + 0.35, d.z + 0.4, false, { navBlock: true });
         });
         // teacher desk + chair
         var td = c.teacherDesk, tc = c.W(9.35, 3.2);
@@ -359,7 +359,7 @@
         L.addBox(td.x - 0.5, td.z - 0.95, td.x + 0.5, td.z + 0.95, false, { navBlock: true });
         if (r.id === 'computer') c.desks.forEach(function (d) { U.piece('solid', function () { box(ly, d.x - 0.1 * c.sgn, 0.9, d.z, 0.06, 0.3, 0.45, '#3A4150'); box(ly, d.x - 0.1 * c.sgn + c.sgn * 0.02, 0.9, d.z, 0.02, 0.24, 0.38, '#7FDBFF'); box(ly, d.x - 0.1 * c.sgn, 0.72, d.z, 0.1, 0.1, 0.2, '#3A4150'); }); });
         // rug
-        var rg = c.rug; disk(g, rg.x, rg.z, 1.4, 0.075, acc, 22); disk(g, rg.x, rg.z, 0.9, 0.08, '#FFFFFF', 18); disk(g, rg.x, rg.z, 0.45, 0.085, acc, 14);
+        var rg = c.rug; disk(g, rg.x, rg.z, 1.15, 0.075, acc, 22); disk(g, rg.x, rg.z, 0.75, 0.08, '#FFFFFF', 18); disk(g, rg.x, rg.z, 0.38, 0.085, acc, 14);
       }
       // shelf along one side wall + cubbies
       var a = c.W(4.5, -4.15), b = c.W(8.2, -4.15);
@@ -367,8 +367,9 @@
       L.addBox(Math.min(a.x, b.x), a.z - 0.2, Math.max(a.x, b.x), a.z + 0.2, false, { navBlock: true });
       var a2 = c.W(3.0, 4.15), b2 = c.W(5.4, 4.15);
       U.piece('solid', function () {
-        boxR(ly, Math.min(a2.x, b2.x), a2.z - 0.2, Math.max(a2.x, b2.x), a2.z + 0.2, 0, 1.0, '#E8D9B8');
-        for (var q = 0; q < 6; q++) { var pp = c.W(3.2 + q * 0.4, 4.15); box(ly, pp.x, 0.55, pp.z - 0.21, 0.3, 0.3, 0.03, ['#FF6B6B', '#4FB0F0', '#FFD23F'][q % 3]); }
+        boxR(ly, Math.min(a2.x, b2.x), a2.z - 0.2, Math.max(a2.x, b2.x), a2.z + 0.2, 0, 1.65, '#E8D9B8');
+        // 18 cubbies: three tiers of six, one for every child
+        for (var q = 0; q < 18; q++) { var pp = c.W(3.2 + (q % 6) * 0.4, 4.15); box(ly, pp.x, 0.45 + Math.floor(q / 6) * 0.5, pp.z - 0.21, 0.3, 0.38, 0.03, ['#FF6B6B', '#4FB0F0', '#FFD23F'][q % 3]); }
       });
       L.addBox(Math.min(a2.x, b2.x), a2.z - 0.2, Math.max(a2.x, b2.x), a2.z + 0.2, false, { navBlock: true });
       plant(ly, c.W(9.2, -4.0).x, c.W(9.2, -4.0).z, 1);
@@ -458,6 +459,10 @@
     var co = F.cafeCounter; boxR(ly, co.x0, co.z0, co.x1, co.z1, 0, 1.0, '#E8E8E8'); boxR(ly, co.x0 - 0.05, co.z0, co.x1 + 0.05, co.z1, 1.0, 1.08, '#8CC8F0');
     box(ly, co.x0 + 0.45, 1.8, (co.z0 + co.z1) / 2, 0.05, 0.9, co.z1 - co.z0 - 0.4, '#FFFFFF', 0);
     for (var z = co.z0 + 0.8; z < co.z1 - 0.5; z += 1.4) { box(ly, co.x0 + 0.4, 1.18, z, 0.5, 0.1, 0.4, '#C9894F'); sph(ly, co.x0 + 0.4, 1.3, z, 0.18, 0.1, 0.18, '#FFB74D', null, 5); }
+    // tray rail along the front of the counter, a stack of trays at the head of the line, floor tape marking the line
+    box(ly, co.x0 - 0.2, 0.88, (co.z0 + co.z1) / 2, 0.22, 0.05, co.z1 - co.z0, '#9AA3AF');
+    [co.z0, co.z1].forEach(function (zz) { box(ly, co.x0 - 0.2, 0.44, zz, 0.06, 0.88, 0.06, '#7A808C'); });
+    for (var tz = 0; tz < 6; tz++) box(ly, co.x0 - 0.2, 0.93 + tz * 0.03, co.z0 + 0.5, 0.4, 0.025, 0.3, '#E8504A');
     L.addBox(co.x0, co.z0, co.x1, co.z1, true);
     U.force = null;
     // trash cans
